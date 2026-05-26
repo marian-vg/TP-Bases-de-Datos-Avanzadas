@@ -6,7 +6,14 @@
 -- siguiendo la sintaxis estándar moderna de PostgreSQL y mapeo explícito de columnas.
 --
 -- Para ejecutar este script desde la raíz del proyecto:
--- psql -h localhost -U postgres -d db_dba -f data/carga-dataset.sql
+-- == POWERSHELL COMMAND ==
+-- $env:PGPASSWORD="password"; psql -h localhost -U postgres -d db_name -f
+-- database/carga-dataset.sql
+--
+-- == CMD COMMAND ==
+-- set PGPASSWORD=password && psql -h localhost -U postgres -d db_name -f
+-- database/carga-dataset.sql
+--
 -- ============================================================================
 
 -- 1. LIMPIEZA DE TABLAS EXISTENTES (Orden correcto respetando claves foráneas)
@@ -38,6 +45,7 @@
 -- COMMIT;
 
 -- 2. CARGA DE CATÁLOGOS E INFORMACIÓN OPERATIVA BASE
+\encoding UTF8
 
 -- 01. Tipo de Incidente
 \copy TipoIncidente (id_tipo_incidente, nombre, descripcion) FROM 'data/01_tipo_incidente.csv' WITH (FORMAT csv, HEADER true, DELIMITER ',');
