@@ -1,5 +1,8 @@
 -- ============================================================================
 -- 1. TABLAS INDEPENDIENTES (CATÁLOGOS Y PARÁMETROS BASE)
+--
+-- $env:PGPASSWORD="password"; psql -h localhost -U postgres -d db_name -f
+-- database/create-tables.sql  
 -- ============================================================================
 
 CREATE TABLE EstadoIncidente (
