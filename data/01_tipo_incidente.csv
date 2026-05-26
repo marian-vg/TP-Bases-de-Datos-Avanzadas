@@ -1,0 +1,15 @@
+id,nombre,descripcion
+1,Accidente de tránsito,"Colisiones, atropellamientos, vuelcos en vía pública"
+2,Incendio estructural,"Incendio en viviendas, comercios o edificios"
+3,Incendio forestal,"Fuego en pastizales, basurales o zonas con vegetación"
+4,Emergencia médica,"Paro cardíaco, ACV, traumatismo, descompensación"
+5,Robo / Asalto,Hechos delictivos en curso o recientes
+6,Violencia doméstica,Situaciones de violencia en el ámbito familiar
+7,Disturbios,"Tumultos, riñas, alteración del orden público"
+8,Fuga de gas,Pérdidas de gas natural o GLP
+9,Corte de energía,Cortes prolongados o fallas en red eléctrica
+10,Inundación urbana,Anegamientos por lluvia o desborde de cuencas
+11,Derrumbe,"Caída de estructuras, mampostería o árboles"
+12,Persona desaparecida,Búsqueda de personas extraviadas
+13,Materiales peligrosos,"Derrame químico, vertido tóxico, fugas industriales"
+14,Rescate acuático,"Personas en riesgo en ríos, arroyos o piletas"

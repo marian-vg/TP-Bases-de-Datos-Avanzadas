@@ -1,0 +1,13 @@
+id,nombre,descripcion
+1,Ambulancia SAME,Unidad de emergencia médica avanzada
+2,Ambulancia básica,Unidad de traslado y atención primaria
+3,Autobomba,Camión de bomberos para incendios estructurales
+4,Bomberos forestales,Unidad especializada en incendios de vegetación
+5,Patrullero,Móvil policial de respuesta rápida
+6,Móvil de tránsito,Unidad de control y siniestros viales
+7,Defensa civil,Móvil de asistencia ante catástrofes
+8,Cuadrilla de gas,Personal técnico de red de gas
+9,Cuadrilla eléctrica,Personal técnico de red eléctrica
+10,Móvil municipal,Servicios urbanos generales
+11,Rescate acuático,Equipo de salvamento en agua
+12,Helicóptero sanitario,Aeronave de emergencias médicas

@@ -1,0 +1,11 @@
+id,nombre,descripcion
+1,Detección de humo,Activación de sensor por presencia de humo
+2,Detección de gas,Lectura anómala de concentración de gas
+3,Movimiento sospechoso,Patrón de movimiento inusual detectado por cámara o PIR
+4,Activación de botón de pánico,Pulsado manual de dispositivo de emergencia
+5,Detección acústica de disparo,Patrón sonoro compatible con arma de fuego
+6,Temperatura crítica,Lectura por encima del umbral configurado
+7,Inundación detectada,Presencia de agua en zona monitoreada
+8,Vibración sísmica,Movimiento telúrico registrado
+9,Calidad de aire degradada,Partículas o gases por encima del umbral
+10,Cámara fuera de línea,Pérdida de señal de dispositivo de video
