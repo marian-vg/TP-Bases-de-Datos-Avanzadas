@@ -17,32 +17,32 @@
 -- ============================================================================
 
 -- 1. LIMPIEZA DE TABLAS EXISTENTES (Orden correcto respetando claves foráneas)
--- BEGIN;
+BEGIN;
 
--- TRUNCATE TABLE 
---     Asignacion, 
---     Penalizacion, 
---     Log, 
---     ZonaRecurso, 
---     Recurso, 
---     Sensor, 
---     Evento, 
---     Incidente, 
---     SLA, 
---     Zona, 
---     TipoIncidente, 
---     EstadoIncidente, 
---     Gravedad, 
---     NivelRiesgo, 
---     TipoSensor, 
---     TipoEvento, 
---     TipoRecurso, 
---     EstadoRecurso, 
---     TipoPenalizacion, 
---     ParametrosSistema 
--- RESTART IDENTITY CASCADE;
+TRUNCATE TABLE 
+    Asignacion, 
+    Penalizacion, 
+    Log, 
+    ZonaRecurso, 
+    Recurso, 
+    Sensor, 
+    Evento, 
+    Incidente, 
+    SLA, 
+    Zona, 
+    TipoIncidente, 
+    EstadoIncidente, 
+    Gravedad, 
+    NivelRiesgo, 
+    TipoSensor, 
+    TipoEvento, 
+    TipoRecurso, 
+    EstadoRecurso, 
+    TipoPenalizacion, 
+    ParametrosSistema 
+RESTART IDENTITY CASCADE;
 
--- COMMIT;
+COMMIT;
 
 -- 2. CARGA DE CATÁLOGOS E INFORMACIÓN OPERATIVA BASE
 \encoding UTF8
