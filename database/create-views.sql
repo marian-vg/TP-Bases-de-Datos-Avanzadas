@@ -1,4 +1,19 @@
 -- ============================================================================
+-- SMART CITY - SCRIPT DE CREACIÓN DE VISTAS
+-- ============================================================================
+-- Este script genera todas las vistas necesarias para el monitoreo operativo,
+-- el cruce de datos temporales (SLA) y la toma de decisiones para las 
+-- reglas activas del sistema.
+--
+-- Para ejecutar este script desde la raíz del proyecto:
+-- == POWERSHELL COMMAND ==
+-- $env:PGPASSWORD="password"; psql -h localhost -U postgres -d db_name -f database/create-views.sql
+--
+-- == CMD COMMAND ==
+-- set PGPASSWORD=password && psql -h localhost -U postgres -d db_name -f database/create-views.sql
+-- ============================================================================
+
+-- ============================================================================
 -- VISTAS DE INCIDENTES
 -- ============================================================================
 
@@ -69,7 +84,9 @@ SELECT
     COUNT(i.id_incidente) AS total_incidentes
 FROM Zona z
 JOIN NivelRiesgo nr ON z.fk_nivel_riesgo_id = nr.id_nivel_riesgo
-LEFT JOIN Incidente i ON z.id_zona = i.fk_zona_id
+JOIN Incidente i ON z.id_zona = i.fk_zona_id
+JOIN EstadoIncidente ei ON i.fk_estado_incidente_id = ei.id_estado_incidente
+WHERE ei.nombre NOT IN ('Resuelto', 'Cancelado')
 GROUP BY z.id_zona, z.nombre, nr.nombre
 ORDER BY total_incidentes DESC;
 
