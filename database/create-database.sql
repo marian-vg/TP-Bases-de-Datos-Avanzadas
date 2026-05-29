@@ -1,7 +1,6 @@
 -- ============================================================================
 -- SMART CITY - SCRIPT DE CREACIÓN DE BASE DE DATOS
 -- ============================================================================
--- Este script se ejecuta conectado a la base de datos administrativa 'postgres'
 -- para limpiar y crear la base de datos 'smart_city' desde cero de forma limpia.
 --
 -- ============================================================================
