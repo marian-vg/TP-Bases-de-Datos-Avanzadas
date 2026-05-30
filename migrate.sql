@@ -24,3 +24,6 @@
 
 -- 4. Carga de datos inicial (DML) de catálogos y registros operativos.
 \ir database/carga-dataset.sql
+
+-- 5. Creación de vistas de monitoreo y reglas activas.
+\ir database/create-views.sql

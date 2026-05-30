@@ -1,0 +1,43 @@
+# ============================================================================
+# SMART CITY - ENTORNO DE BASE DE DATOS ESTANDARIZADO (PostgreSQL 16)
+# ============================================================================
+# Define una instancia de PostgreSQL reproducible para todo el equipo,
+# levantable con: docker compose up -d
+#
+# En el primer arranque, PostgreSQL crea la base 'smart_city' y ejecuta
+# docker/init-db.sh, que carga estructura, datos y vistas.
+# ============================================================================
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: bd_smartcity_tp
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: smart_city      # Base creada por PostgreSQL en el arranque.
+      POSTGRES_USER: postgres      # Usuario referenciado en los scripts SQL del repo.
+      POSTGRES_PASSWORD: password  # Contraseña referenciada en los scripts SQL del repo.
+    ports:
+      # Formato "host:contenedor". Se expone en el puerto 5433 del host para
+      # evitar conflicto con un PostgreSQL local (que suele ocupar el 5432).
+      # Conexiones desde el host vía localhost:5433; internamente usa 5432.
+      - "5433:5432"
+    volumes:
+      # 1) Volumen nombrado: persiste los datos entre reinicios del contenedor.
+      - postgres_data:/var/lib/postgresql/data
+      # 2) Scripts SQL y CSV montados en el contenedor en modo solo lectura.
+      #    Requerido para que el proceso de inicialización acceda a los archivos.
+      - ./database:/project/database:ro
+      - ./data:/project/data:ro
+      # 3) Orquestador de inicialización. PostgreSQL ejecuta el contenido de
+      #    docker-entrypoint-initdb.d durante el primer arranque.
+      - ./docker/init-db.sh:/docker-entrypoint-initdb.d/init-db.sh:ro
+    healthcheck:
+      # Marca el contenedor como "healthy" cuando PostgreSQL acepta conexiones.
+      test: ["CMD-SHELL", "pg_isready -U postgres -d smart_city"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  postgres_data:

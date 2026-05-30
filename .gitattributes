@@ -1,0 +1,4 @@
+# Fuerza saltos de línea LF (Unix) en los scripts .sh. Un commit con CRLF
+# (Windows) impide su ejecución dentro del contenedor Linux, fallando con un
+# error del tipo: "bash\r: not found".
+*.sh text eol=lf
