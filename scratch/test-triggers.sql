@@ -1,6 +1,16 @@
 -- ============================================================================
 -- SCRIPT DE PRUEBAS DE INTEGRIDAD PARA TRIGGERS (R8, R9, R10, R11)
 -- ============================================================================
+--
+-- Este script ejercita SOLO las reglas de VALIDACIÓN (R8/R9/R10/R11). Para no
+-- pelear contra las reglas de AUTOMATIZACIÓN (R1/R2: motor de asignación, que mueve
+-- los incidentes Pendiente -> En proceso y ocupa recursos solo), deshabilitamos los
+-- triggers de automatización mientras dura el test y los rehabilitamos al final.
+--
+-- Patrón de aserción: cada caso "debería fallar" se envuelve en un sub-bloque que
+-- captura la excepción. Si la regla bloqueó -> v_bloqueado = TRUE -> ÉXITO. Si NO
+-- bloqueó -> RAISE EXCEPTION visible (el test GRITA en vez de reportar un falso ÉXITO).
+-- ============================================================================
 
 \echo '--------------------------------------------------'
 \echo 'INICIANDO PRUEBAS DE INTEGRIDAD DE TRIGGERS'
@@ -10,10 +20,18 @@
 DELETE FROM Asignacion;
 DELETE FROM Incidente;
 
+-- Reset del estado operativo de los recursos para que el test sea idempotente:
+-- corridas previas pudieron dejarlos Ocupados / En tránsito / Fuera de servicio.
+UPDATE Recurso SET fk_estado_recurso_id = 1 WHERE fk_estado_recurso_id <> 1;
+
 -- Sincronizar secuencias para evitar colisiones de llaves primarias
 SELECT setval(pg_get_serial_sequence('recurso', 'id_recurso'), COALESCE(MAX(id_recurso), 1)) FROM Recurso;
 SELECT setval(pg_get_serial_sequence('incidente', 'id_incidente'), COALESCE(MAX(id_incidente), 1)) FROM Incidente;
 SELECT setval(pg_get_serial_sequence('asignacion', 'id_asignacion'), COALESCE(MAX(id_asignacion), 1)) FROM Asignacion;
+
+-- Aislamiento: apagamos las reglas de automatización para probar las validaciones puras.
+ALTER TABLE Incidente  DISABLE TRIGGER tg_incidente_auto_asignacion;
+ALTER TABLE Asignacion DISABLE TRIGGER tg_gestion_asignacion;
 
 -- ----------------------------------------------------------------------------
 -- PRUEBA 1: REGLA 8 - VALIDACIÓN DE DISPONIBILIDAD DE RECURSOS
@@ -26,6 +44,7 @@ DECLARE
     v_incidente_1 INT;
     v_incidente_2 INT;
     v_estado_pendiente INT;
+    v_bloqueado BOOLEAN;
 BEGIN
     -- Obtener el ID de estado 'Pendiente'
     SELECT id_estado_incidente INTO v_estado_pendiente FROM EstadoIncidente WHERE nombre = 'Pendiente';
@@ -40,39 +59,59 @@ BEGIN
     VALUES (2, 1, v_estado_pendiente, 1, 'Incidente de prueba asignación 2', 1)
     RETURNING id_incidente INTO v_incidente_2;
 
-    -- Buscar un recurso que esté en estado 'Disponible'
-    SELECT r.id_recurso INTO v_recurso_disp 
-    FROM Recurso r 
+    -- Buscar un recurso Disponible que ADEMÁS sea compatible con el incidente 1
+    -- (tipo aplicable al tipo 1 y habilitado en su zona, la 1). Si no filtramos por
+    -- tipo y zona, la asignación podría rebotar contra las validaciones de tipo o de zona,
+    -- que no es lo que esta prueba quiere ejercitar (R8: disponibilidad).
+    SELECT r.id_recurso INTO v_recurso_disp
+    FROM Recurso r
     JOIN EstadoRecurso er ON r.fk_estado_recurso_id = er.id_estado_recurso
-    WHERE er.nombre = 'Disponible' 
+    JOIN ZonaRecurso zr ON zr.id_recurso = r.id_recurso AND zr.id_zona = 1
+    JOIN TipoIncidenteTipoRecurso titr
+      ON titr.fk_tipo_recurso_id = r.fk_tipo_recurso_id AND titr.fk_tipo_incidente_id = 1
+    WHERE er.nombre = 'Disponible'
     LIMIT 1;
 
+    IF v_recurso_disp IS NULL THEN
+        RAISE EXCEPTION 'PRECONDICIÓN FALLIDA: no hay recurso Disponible compatible (tipo 1 / zona 1) para la prueba.';
+    END IF;
+
     RAISE NOTICE 'Paso 1.1: Insertando primera asignación de recurso disponible... (Debería tener éxito)';
-    INSERT INTO Asignacion (fk_recurso_id, fk_incidente_id) 
+    INSERT INTO Asignacion (fk_recurso_id, fk_incidente_id)
     VALUES (v_recurso_disp, v_incidente_1);
 
     RAISE NOTICE 'Paso 1.2: Intentando insertar segunda asignación activa para el mismo recurso... (Debería fallar)';
+    v_bloqueado := FALSE;
     BEGIN
-        INSERT INTO Asignacion (fk_recurso_id, fk_incidente_id) 
+        INSERT INTO Asignacion (fk_recurso_id, fk_incidente_id)
         VALUES (v_recurso_disp, v_incidente_2);
-        RAISE EXCEPTION 'ERROR: Se permitió la doble asignación simultánea (Fallo del trigger R8).';
     EXCEPTION WHEN OTHERS THEN
-        RAISE NOTICE 'ÉXITO: Se bloqueó la doble asignación simultánea del recurso.';
-        RAISE NOTICE 'Mensaje del error: %', SQLERRM;
+        v_bloqueado := TRUE;
+        RAISE NOTICE '   (motivo del bloqueo: %)', SQLERRM;
     END;
+    IF v_bloqueado THEN
+        RAISE NOTICE 'ÉXITO: Se bloqueó la doble asignación simultánea del recurso.';
+    ELSE
+        RAISE EXCEPTION 'FALLO R8: se permitió la doble asignación simultánea del recurso %.', v_recurso_disp;
+    END IF;
 
     -- Cambiamos manualmente el estado del recurso a 'Fuera de servicio' (id=3)
     UPDATE Recurso SET fk_estado_recurso_id = 3 WHERE id_recurso = v_recurso_disp;
-    
+
     RAISE NOTICE 'Paso 1.3: Intentando asignar un recurso Fuera de servicio... (Debería fallar)';
+    v_bloqueado := FALSE;
     BEGIN
-        INSERT INTO Asignacion (fk_recurso_id, fk_incidente_id) 
+        INSERT INTO Asignacion (fk_recurso_id, fk_incidente_id)
         VALUES (v_recurso_disp, v_incidente_2);
-        RAISE EXCEPTION 'ERROR: Se permitió asignar un recurso Fuera de servicio (Fallo del trigger R8).';
     EXCEPTION WHEN OTHERS THEN
-        RAISE NOTICE 'ÉXITO: Se bloqueó la asignación del recurso no disponible.';
-        RAISE NOTICE 'Mensaje del error: %', SQLERRM;
+        v_bloqueado := TRUE;
+        RAISE NOTICE '   (motivo del bloqueo: %)', SQLERRM;
     END;
+    IF v_bloqueado THEN
+        RAISE NOTICE 'ÉXITO: Se bloqueó la asignación del recurso no disponible.';
+    ELSE
+        RAISE EXCEPTION 'FALLO R8: se permitió asignar el recurso % estando Fuera de servicio.', v_recurso_disp;
+    END IF;
 
     -- Limpieza de prueba 1
     DELETE FROM Asignacion WHERE fk_incidente_id IN (v_incidente_1, v_incidente_2);
@@ -93,25 +132,32 @@ DECLARE
     v_estado_pendiente INT;
     v_estado_proceso INT;
     v_estado_resuelto INT;
+    v_bloqueado BOOLEAN;
 BEGIN
     -- Obtener IDs de estados
     SELECT id_estado_incidente INTO v_estado_pendiente FROM EstadoIncidente WHERE nombre = 'Pendiente';
     SELECT id_estado_incidente INTO v_estado_proceso FROM EstadoIncidente WHERE nombre = 'En proceso';
     SELECT id_estado_incidente INTO v_estado_resuelto FROM EstadoIncidente WHERE nombre = 'Resuelto';
 
-    -- Crear un incidente de prueba en estado 'Pendiente'
+    -- Crear un incidente de prueba en estado 'Pendiente'. Con el motor de asignación
+    -- deshabilitado, se queda Pendiente (no se le asigna recurso ni pasa a En proceso solo).
     INSERT INTO Incidente (fk_tipo_incidente_id, fk_gravedad_id, fk_estado_incidente_id, fk_zona_id, descripcion, prioridad)
     VALUES (3, 1, v_estado_pendiente, 1, 'Incidente de prueba máquina de estados', 1)
     RETURNING id_incidente INTO v_incidente;
 
     RAISE NOTICE 'Paso 2.1: Intentando pasar de Pendiente directamente a Resuelto... (Debería fallar)';
+    v_bloqueado := FALSE;
     BEGIN
         UPDATE Incidente SET fk_estado_incidente_id = v_estado_resuelto WHERE id_incidente = v_incidente;
-        RAISE EXCEPTION 'ERROR: Se permitió la transición directa Pendiente -> Resuelto (Fallo del trigger R9).';
     EXCEPTION WHEN OTHERS THEN
-        RAISE NOTICE 'ÉXITO: Se bloqueó la transición directa Pendiente -> Resuelto.';
-        RAISE NOTICE 'Mensaje del error: %', SQLERRM;
+        v_bloqueado := TRUE;
+        RAISE NOTICE '   (motivo del bloqueo: %)', SQLERRM;
     END;
+    IF v_bloqueado THEN
+        RAISE NOTICE 'ÉXITO: Se bloqueó la transición directa Pendiente -> Resuelto.';
+    ELSE
+        RAISE EXCEPTION 'FALLO R9: se permitió la transición directa Pendiente -> Resuelto.';
+    END IF;
 
     RAISE NOTICE 'Paso 2.2: Actualizando de Pendiente a En proceso... (Debería tener éxito)';
     UPDATE Incidente SET fk_estado_incidente_id = v_estado_proceso WHERE id_incidente = v_incidente;
@@ -122,15 +168,21 @@ BEGIN
     RAISE NOTICE 'ÉXITO: Transición En proceso -> Resuelto realizada.';
 
     RAISE NOTICE 'Paso 2.4: Intentando modificar el estado de un incidente Resuelto... (Debería fallar)';
+    v_bloqueado := FALSE;
     BEGIN
         UPDATE Incidente SET fk_estado_incidente_id = v_estado_proceso WHERE id_incidente = v_incidente;
-        RAISE EXCEPTION 'ERROR: Se permitió cambiar el estado de un incidente Resuelto (Fallo del trigger R9).';
     EXCEPTION WHEN OTHERS THEN
-        RAISE NOTICE 'ÉXITO: Se bloqueó la modificación del incidente cerrado.';
-        RAISE NOTICE 'Mensaje del error: %', SQLERRM;
+        v_bloqueado := TRUE;
+        RAISE NOTICE '   (motivo del bloqueo: %)', SQLERRM;
     END;
+    IF v_bloqueado THEN
+        RAISE NOTICE 'ÉXITO: Se bloqueó la modificación del incidente cerrado.';
+    ELSE
+        RAISE EXCEPTION 'FALLO R9: se permitió cambiar el estado de un incidente ya Resuelto.';
+    END IF;
 
     -- Limpieza de prueba 2
+    DELETE FROM Asignacion WHERE fk_incidente_id = v_incidente;
     DELETE FROM Incidente WHERE id_incidente = v_incidente;
 END;
 $$;
@@ -147,6 +199,7 @@ DECLARE
     v_recurso INT;
     v_incidente_zona_2 INT;
     v_estado_pendiente INT;
+    v_bloqueado BOOLEAN;
 BEGIN
     -- Obtener el ID de estado 'Pendiente'
     SELECT id_estado_incidente INTO v_estado_pendiente FROM EstadoIncidente WHERE nombre = 'Pendiente';
@@ -167,22 +220,27 @@ BEGIN
 
     -- 3. Intentar asignar el recurso (de Zona 1) al incidente en la Zona 2 (Debería fallar)
     RAISE NOTICE 'Paso 3.1: Intentando asignar recurso de Zona 1 a incidente en Zona 2... (Debería fallar)';
+    v_bloqueado := FALSE;
     BEGIN
         INSERT INTO Asignacion (fk_recurso_id, fk_incidente_id)
         VALUES (v_recurso, v_incidente_zona_2);
-        RAISE EXCEPTION 'ERROR: Se permitió asignar un recurso a una zona no habilitada (Fallo del trigger R10).';
     EXCEPTION WHEN OTHERS THEN
-        RAISE NOTICE 'ÉXITO: Se bloqueó la asignación del recurso fuera de su zona habilitada.';
-        RAISE NOTICE 'Mensaje del error: %', SQLERRM;
+        v_bloqueado := TRUE;
+        RAISE NOTICE '   (motivo del bloqueo: %)', SQLERRM;
     END;
+    IF v_bloqueado THEN
+        RAISE NOTICE 'ÉXITO: Se bloqueó la asignación del recurso fuera de su zona habilitada.';
+    ELSE
+        RAISE EXCEPTION 'FALLO R10: se permitió asignar un recurso a una zona no habilitada.';
+    END IF;
 
     -- 4. Activar el bypass de emergencia (R15) e intentar la asignación nuevamente (Debería tener éxito)
     RAISE NOTICE 'Paso 3.2: Activando bypass de zona (my.bypass_zona = 1) e intentando asignar... (Debería tener éxito)';
     PERFORM set_config('my.bypass_zona', '1', true);
-    
+
     INSERT INTO Asignacion (fk_recurso_id, fk_incidente_id)
     VALUES (v_recurso, v_incidente_zona_2);
-    
+
     RAISE NOTICE 'ÉXITO: Asignación por rebalanceo de emergencia permitida.';
 
     -- Desactivar bypass
@@ -209,6 +267,7 @@ DECLARE
     v_incidente_duplicado INT;
     v_incidente_fuera_ventana INT;
     v_minutos NUMERIC;
+    v_bloqueado BOOLEAN;
 BEGIN
     -- Obtener los IDs de estados
     SELECT id_estado_incidente INTO v_estado_pendiente FROM EstadoIncidente WHERE nombre = 'Pendiente';
@@ -231,14 +290,19 @@ BEGIN
 
     -- 2. Intentar registrar un incidente duplicado en la misma zona y tipo (Debería fallar)
     RAISE NOTICE 'Paso 4.2: Intentando registrar incidente duplicado inmediatamente... (Debería fallar)';
+    v_bloqueado := FALSE;
     BEGIN
         INSERT INTO Incidente (fk_tipo_incidente_id, fk_gravedad_id, fk_estado_incidente_id, fk_zona_id, descripcion, prioridad)
         VALUES (5, 1, v_estado_pendiente, 1, 'Segundo reporte de prueba R11', 1);
-        RAISE EXCEPTION 'ERROR: Se permitió registrar un incidente duplicado en el período de bloqueo (Fallo del trigger R11).';
     EXCEPTION WHEN OTHERS THEN
-        RAISE NOTICE 'ÉXITO: Se bloqueó el registro del incidente duplicado.';
-        RAISE NOTICE 'Mensaje del error: %', SQLERRM;
+        v_bloqueado := TRUE;
+        RAISE NOTICE '   (motivo del bloqueo: %)', SQLERRM;
     END;
+    IF v_bloqueado THEN
+        RAISE NOTICE 'ÉXITO: Se bloqueó el registro del incidente duplicado.';
+    ELSE
+        RAISE EXCEPTION 'FALLO R11: se permitió registrar un incidente duplicado en el período de bloqueo.';
+    END IF;
 
     -- 3. Cancelar el incidente original
     RAISE NOTICE 'Paso 4.3: Cancelando el incidente original...';
@@ -254,8 +318,8 @@ BEGIN
     -- 5. Simular el paso del tiempo desplazando la fecha del incidente duplicado a hace 11 minutos
     -- (fuera de la ventana de 10 minutos configurada)
     RAISE NOTICE 'Paso 4.5: Simulando paso del tiempo (desplazando incidente duplicado a hace 11 minutos)...';
-    UPDATE Incidente 
-    SET fecha_hora_registro = CURRENT_TIMESTAMP - INTERVAL '11 minutes' 
+    UPDATE Incidente
+    SET fecha_hora_registro = CURRENT_TIMESTAMP - INTERVAL '11 minutes'
     WHERE id_incidente = v_incidente_duplicado;
 
     -- 6. Intentar registrar otro incidente similar inmediatamente (Debería tener éxito porque el anterior está fuera de la ventana)
@@ -266,9 +330,17 @@ BEGIN
     RAISE NOTICE 'ÉXITO: Registro permitido al haber expirado la ventana de tiempo (ID %).', v_incidente_fuera_ventana;
 
     -- Limpieza de prueba 4
+    DELETE FROM Asignacion
+     WHERE fk_incidente_id IN (
+        SELECT id_incidente FROM Incidente WHERE fk_tipo_incidente_id = 5 AND fk_zona_id = 1
+     );
     DELETE FROM Incidente WHERE fk_tipo_incidente_id = 5 AND fk_zona_id = 1;
 END;
 $$;
+
+-- Rehabilitar las reglas de automatización que apagamos al inicio.
+ALTER TABLE Incidente  ENABLE TRIGGER tg_incidente_auto_asignacion;
+ALTER TABLE Asignacion ENABLE TRIGGER tg_gestion_asignacion;
 
 \echo '--------------------------------------------------'
 \echo 'PRUEBAS FINALIZADAS'
