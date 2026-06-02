@@ -24,11 +24,13 @@
 -- DROP FUNCTION IF EXISTS fn_valida_coherencia_estados_incidente();
 -- DROP FUNCTION IF EXISTS fn_valida_duplicacion_incidente();
 -- =============================================================================================================
--- 1. INTEGRIDAD DE ASIGNACIONES (Unifica R8 y R10)
+-- 1. INTEGRIDAD DE ASIGNACIONES (Unifica R8 y R10 + validación de tipo)
 -- =============================================================================================================
 --
 -- R8. Validación de disponibilidad de recursos: No se podrá asignar un recurso que ya esté ocupado.
 -- R10. Validación de zona del recurso: Un recurso solo podrá asignarse a incidentes dentro de su zona habilitada.
+-- Tipo. Validación de integridad: el tipo de recurso debe ser aplicable al tipo de incidente
+--       (TipoIncidenteTipoRecurso). Rescatada de create-triggers al unificar las validaciones aquí.
 --
 -- TOC -> BEFORE INSERT OR UPDATE
 -- Granularidad -> FOR EACH ROW
@@ -39,7 +41,9 @@ CREATE OR REPLACE FUNCTION fn_valida_registro_asignacion()
 RETURNS TRIGGER AS $$
 DECLARE
     v_estado_nombre VARCHAR(50);
+    v_tipo_recurso INT;
     v_zona_incidente INT;
+    v_tipo_incidente INT;
 BEGIN
     -- Si es un UPDATE y no cambia el recurso ni el incidente, omitimos validaciones.
     IF TG_OP = 'UPDATE'
@@ -48,16 +52,19 @@ BEGIN
             RETURN NEW;
     END IF;
 
-    -- Carga de contexto: Obtenemos el estado del recurso y la zona del incidente en una sola lectura
-    SELECT EstadoRecurso.nombre 
-    INTO v_estado_nombre
+    -- Carga de contexto del recurso: estado y tipo en una sola lectura.
+    -- FOR UPDATE OF Recurso -> lockeamos SOLO la fila del recurso para evitar
+    -- asignaciones concurrentes del mismo, sin lockear la fila compartida del catálogo EstadoRecurso.
+    SELECT EstadoRecurso.nombre, Recurso.fk_tipo_recurso_id
+    INTO v_estado_nombre, v_tipo_recurso
     FROM Recurso
     JOIN EstadoRecurso ON Recurso.fk_estado_recurso_id = EstadoRecurso.id_estado_recurso
     WHERE Recurso.id_recurso = NEW.fk_recurso_id
-    FOR UPDATE;
+    FOR UPDATE OF Recurso;
 
-    SELECT Incidente.fk_zona_id 
-    INTO v_zona_incidente
+    -- Carga de contexto del incidente: zona y tipo.
+    SELECT Incidente.fk_zona_id, Incidente.fk_tipo_incidente_id
+    INTO v_zona_incidente, v_tipo_incidente
     FROM Incidente
     WHERE Incidente.id_incidente = NEW.fk_incidente_id;
 
@@ -66,20 +73,34 @@ BEGIN
     -- -------------------------------------------------------------------------
     -- Validamos que el estado del recurso sea 'Disponible'
     IF v_estado_nombre IS DISTINCT FROM 'Disponible' THEN
-        RAISE EXCEPTION 'No se puede asignar el recurso % porque no se encuentra disponible (Estado: %).', 
+        RAISE EXCEPTION 'No se puede asignar el recurso % porque no se encuentra disponible (Estado: %).',
             NEW.fk_recurso_id, v_estado_nombre;
     END IF;
 
     -- Validamos que no cuente con una asignación activa (finalización nula)
     IF EXISTS (
-        SELECT 1 
-        FROM Asignacion 
-        WHERE Asignacion.fk_recurso_id = NEW.fk_recurso_id 
+        SELECT 1
+        FROM Asignacion
+        WHERE Asignacion.fk_recurso_id = NEW.fk_recurso_id
           AND Asignacion.timestamp_finalizacion IS NULL
           AND Asignacion.id_asignacion IS DISTINCT FROM NEW.id_asignacion
     ) THEN
-        RAISE EXCEPTION 'No se puede asignar el recurso % porque ya cuenta con una asignación activa en curso.', 
+        RAISE EXCEPTION 'No se puede asignar el recurso % porque ya cuenta con una asignación activa en curso.',
             NEW.fk_recurso_id;
+    END IF;
+
+    -- -------------------------------------------------------------------------
+    -- VALIDACIÓN DE TIPO APLICABLE (integridad: el tipo de recurso debe poder
+    -- atender el tipo de incidente; p. ej. no se asigna un patrullero a un incendio)
+    -- -------------------------------------------------------------------------
+    IF NOT EXISTS (
+        SELECT 1
+        FROM TipoIncidenteTipoRecurso
+        WHERE TipoIncidenteTipoRecurso.fk_tipo_incidente_id = v_tipo_incidente
+          AND TipoIncidenteTipoRecurso.fk_tipo_recurso_id   = v_tipo_recurso
+    ) THEN
+        RAISE EXCEPTION 'El recurso % (tipo %) no es aplicable a un incidente de tipo %.',
+            NEW.fk_recurso_id, v_tipo_recurso, v_tipo_incidente;
     END IF;
 
     -- -------------------------------------------------------------------------
@@ -184,19 +205,17 @@ BEGIN
             RAISE EXCEPTION 'Transición de estado inválida: No se puede pasar de Pendiente directamente a Resuelto.';
         END IF;
 
-        -- Whitelist de transiciones válidas:
-        -- Pendiente -> En proceso, Escalado, En espera, Cancelado
+        -- Whitelist de transiciones válidas (estados reales del catálogo: Pendiente,
+        -- En proceso, Resuelto, Escalado, Cancelado):
+        -- Pendiente -> En proceso, Escalado, Cancelado
         -- En proceso -> Resuelto, Escalado, Cancelado
         -- Escalado -> En proceso, Resuelto, Cancelado
-        -- En espera -> Pendiente, En proceso, Cancelado
         IF NOT (
-            (v_estado_old = 'Pendiente' AND v_estado_new IN ('En proceso', 'Escalado', 'En espera', 'Cancelado')) 
+            (v_estado_old = 'Pendiente' AND v_estado_new IN ('En proceso', 'Escalado', 'Cancelado'))
             OR
-            (v_estado_old = 'En proceso' AND v_estado_new IN ('Resuelto', 'Escalado', 'Cancelado')) 
+            (v_estado_old = 'En proceso' AND v_estado_new IN ('Resuelto', 'Escalado', 'Cancelado'))
             OR
-            (v_estado_old = 'Escalado' AND v_estado_new IN ('En proceso', 'Resuelto', 'Cancelado')) 
-            OR
-            (v_estado_old = 'En espera' AND v_estado_new IN ('Pendiente', 'En proceso', 'Cancelado'))
+            (v_estado_old = 'Escalado' AND v_estado_new IN ('En proceso', 'Resuelto', 'Cancelado'))
         ) THEN
             RAISE EXCEPTION 'Transición de estado de incidente no permitida por regla de negocio: % -> %', 
                 v_estado_old, v_estado_new;

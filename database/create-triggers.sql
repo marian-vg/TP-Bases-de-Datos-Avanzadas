@@ -86,118 +86,27 @@ FOR EACH ROW EXECUTE FUNCTION fn_auditoria_centralizada();
 
 
 -- ============================================================================
--- 2. VALIDACIONES (R8_Val & R9_Val & R10_Val & R11_Val) + tipo de recurso
+-- 2. CIERRE DE ASIGNACIONES FALLIDAS (soporte operativo para R7)
 -- ============================================================================
+-- Las validaciones R8/R9/R10/R11 + la validación de tipo aplicable viven ahora en
+-- database/triggers/reglas-validadoras.sql (funciones fn_valida_registro_asignacion y
+-- fn_valida_registro_incidente). Aquí solo queda la lógica OPERATIVA que NO es validación:
+-- al marcar una asignación como fallida (estado_exito = FALSE) sin cierre, fijamos
+-- timestamp_finalizacion en este BEFORE para que R7 (cierre automático, AFTER) no cuente
+-- la asignación fallida como "todavía activa".
 
--- Validaciones e integridad sobre Asignacion
-CREATE OR REPLACE FUNCTION fn_validaciones_asignacion()
+CREATE OR REPLACE FUNCTION fn_cerrar_asignacion_fallida()
 RETURNS TRIGGER AS $$
-DECLARE
-    v_zona_incidente INT;
-    v_tipo_incidente INT;
-    v_estado_recurso INT;
-    v_tipo_recurso INT;
 BEGIN
-    -- UPDATE: si la asignación se marca fallida y no tiene cierre, lo fijamos aquí (trigger BEFORE).
-    -- Esto garantiza que R7 (cierre automático) no vea la asignación fallida como "todavía activa".
-    IF (TG_OP = 'UPDATE') THEN
-        IF (NEW.estado_exito IS NOT DISTINCT FROM FALSE AND NEW.timestamp_finalizacion IS NULL) THEN
-            NEW.timestamp_finalizacion := CURRENT_TIMESTAMP;
-        END IF;
-        RETURN NEW;
+    IF (NEW.estado_exito IS NOT DISTINCT FROM FALSE AND NEW.timestamp_finalizacion IS NULL) THEN
+        NEW.timestamp_finalizacion := CURRENT_TIMESTAMP;
     END IF;
-
-    -- A partir de aquí, solo INSERT (alta de una nueva asignación)
-    SELECT i.fk_zona_id, i.fk_tipo_incidente_id
-      INTO v_zona_incidente, v_tipo_incidente
-      FROM Incidente i
-     WHERE i.id_incidente = NEW.fk_incidente_id;
-
-    SELECT r.fk_estado_recurso_id, r.fk_tipo_recurso_id
-      INTO v_estado_recurso, v_tipo_recurso
-      FROM Recurso r
-     WHERE r.id_recurso = NEW.fk_recurso_id;
-
-    -- R8_Val: no se puede asignar un recurso que no esté Disponible (1)
-    IF (v_estado_recurso <> 1) THEN
-        RAISE EXCEPTION 'R8_Val: el recurso % no está Disponible (estado %), no puede asignarse.',
-            NEW.fk_recurso_id, v_estado_recurso;
-    END IF;
-
-    -- Validación de tipo: el tipo de recurso debe ser aplicable al tipo de incidente
-    IF NOT EXISTS (
-        SELECT 1 FROM TipoIncidenteTipoRecurso
-        WHERE fk_tipo_incidente_id = v_tipo_incidente
-          AND fk_tipo_recurso_id   = v_tipo_recurso
-    ) THEN
-        RAISE EXCEPTION 'Tipo inválido: un recurso de tipo % no es aplicable a un incidente de tipo %.',
-            v_tipo_recurso, v_tipo_incidente;
-    END IF;
-
-    -- R10_Val: el recurso debe estar habilitado en la zona del incidente,
-    -- salvo rebalanceo de emergencia (R15) señalizado por my.bypass_zona.
-    IF (COALESCE(current_setting('my.bypass_zona', true), '') <> '1') THEN
-        IF NOT EXISTS (
-            SELECT 1 FROM ZonaRecurso
-            WHERE id_recurso = NEW.fk_recurso_id AND id_zona = v_zona_incidente
-        ) THEN
-            RAISE EXCEPTION 'R10_Val: el recurso % no está habilitado para operar en la zona %.',
-                NEW.fk_recurso_id, v_zona_incidente;
-        END IF;
-    END IF;
-
     RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
 
-CREATE TRIGGER tg_val_asignacion BEFORE INSERT OR UPDATE ON Asignacion
-FOR EACH ROW EXECUTE FUNCTION fn_validaciones_asignacion();
-
-
--- Validaciones sobre Incidente: duplicados (R11) y coherencia de estados (R9)
-CREATE OR REPLACE FUNCTION fn_validaciones_incidente()
-RETURNS TRIGGER AS $$
-DECLARE
-    v_minutos_duplicado NUMERIC;
-BEGIN
-    -- R11_Val: evitar duplicados (misma zona y tipo en un período corto)
-    IF (TG_OP = 'INSERT') THEN
-        SELECT numero INTO v_minutos_duplicado
-          FROM ParametrosSistema WHERE nombre_parametro = 'MINUTOS_DUPLICADO_INCIDENTE';
-        v_minutos_duplicado := COALESCE(v_minutos_duplicado, 10);
-
-        IF EXISTS (
-            SELECT 1 FROM Incidente
-             WHERE fk_zona_id = NEW.fk_zona_id
-               AND fk_tipo_incidente_id = NEW.fk_tipo_incidente_id
-               AND fk_estado_incidente_id <> 5  -- ignorar Cancelados
-               AND fecha_hora_registro >= CURRENT_TIMESTAMP - (v_minutos_duplicado || ' minutes')::INTERVAL
-        ) THEN
-            RAISE EXCEPTION 'R11_Val: ya existe un incidente del mismo tipo en la zona dentro de los últimos % minutos.',
-                v_minutos_duplicado;
-        END IF;
-        RETURN NEW;
-    END IF;
-
-    -- R9_Val: coherencia en la transición de estados
-    IF (TG_OP = 'UPDATE' AND OLD.fk_estado_incidente_id <> NEW.fk_estado_incidente_id) THEN
-        -- Estados terminales: no admiten cambios
-        IF (OLD.fk_estado_incidente_id IN (3, 5)) THEN
-            RAISE EXCEPTION 'R9_Val: el incidente está en estado terminal y no admite cambios de estado.';
-        END IF;
-
-        -- Un Pendiente no puede saltar directo a Resuelto ni a Escalado (no empezó a atenderse)
-        IF (OLD.fk_estado_incidente_id = 1 AND NEW.fk_estado_incidente_id IN (3, 4)) THEN
-            RAISE EXCEPTION 'R9_Val: transición inválida desde Pendiente (solo puede pasar a En proceso o Cancelado).';
-        END IF;
-    END IF;
-
-    RETURN NEW;
-END;
-$$ LANGUAGE plpgsql;
-
-CREATE TRIGGER tg_val_incidente BEFORE INSERT OR UPDATE ON Incidente
-FOR EACH ROW EXECUTE FUNCTION fn_validaciones_incidente();
+CREATE TRIGGER tg_cerrar_asignacion_fallida BEFORE UPDATE ON Asignacion
+FOR EACH ROW EXECUTE FUNCTION fn_cerrar_asignacion_fallida();
 
 
 -- ============================================================================
@@ -712,14 +621,11 @@ $$;
 --    INSERT/UPDATE/DELETE en Log con el payload JSON (old/new), la operación y el trigger que la
 --    originó (NULL = acción manual, leído desde la variable de sesión my.trigger_disparador).
 --
--- 2. VALIDACIONES (BEFORE, abortan la transacción con RAISE):
---    - R8_Val: no se asigna un recurso que no esté Disponible.
---    - Tipo: el tipo de recurso debe ser aplicable al tipo de incidente (TipoIncidenteTipoRecurso).
---    - R10_Val: el recurso debe estar habilitado en la zona, salvo rebalanceo (my.bypass_zona).
---    - R11_Val: no se registran incidentes duplicados (misma zona y tipo en MINUTOS_DUPLICADO_INCIDENTE).
---    - R9_Val: no se cambian estados terminales ni se salta de Pendiente a Resuelto/Escalado.
---    Además, el BEFORE de Asignacion cierra (timestamp_finalizacion) las asignaciones marcadas como
---    fallidas, para que R7 no las cuente como activas.
+-- 2. CIERRE DE ASIGNACIONES FALLIDAS (BEFORE UPDATE sobre Asignacion):
+--    fn_cerrar_asignacion_fallida fija timestamp_finalizacion cuando estado_exito = FALSE sin cierre,
+--    para que R7 (AFTER) no cuente la asignación fallida como activa.
+--    Las VALIDACIONES R8/R9/R10/R11 + la validación de tipo aplicable se movieron a
+--    database/triggers/reglas-validadoras.sql (se cargan después de este archivo en migrate.sql).
 --
 -- 3. PRIORIDAD (R12/R13): BEFORE INSERT sobre Incidente. prioridad = gravedad*10, +bonus si la zona
 --    es de alto riesgo. Se aplica a TODO incidente (IoT o manual).

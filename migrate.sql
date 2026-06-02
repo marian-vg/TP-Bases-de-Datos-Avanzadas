@@ -28,3 +28,8 @@
 -- 5. Creación de vistas de monitoreo y reglas activas.
 \ir database/create-views.sql
 \ir database/create-triggers.sql
+
+-- 6. Reglas validadoras (R8/R9/R10/R11 + validación de tipo). Se cargan DESPUÉS de
+--    create-triggers para reemplazar a sus validaciones; create-triggers conserva la
+--    automatización y el cierre operativo de asignaciones fallidas.
+\ir database/triggers/reglas-validadoras.sql
