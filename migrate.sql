@@ -27,3 +27,4 @@
 
 -- 5. Creación de vistas de monitoreo y reglas activas.
 \ir database/create-views.sql
+\ir database/create-triggers.sql
