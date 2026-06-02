@@ -6,7 +6,7 @@
 # contenedor (cuando el volumen de datos está vacío).
 #
 # Motivo de usar un .sh en lugar de scripts .sql sueltos:
-#   1. Garantiza el orden de ejecución: estructura -> datos -> vistas. Los
+#   1. Garantiza el orden de ejecución: estructura -> datos -> vistas -> triggers. Los
 #      archivos sueltos en docker-entrypoint-initdb.d se ejecutan por orden
 #      alfabético, lo que rompe las dependencias entre scripts.
 #   2. El 'cd /project' permite que las rutas relativas 'data/...' del comando
@@ -31,5 +31,6 @@ run() {
 run database/create-tables.sql
 run database/carga-dataset.sql
 run database/create-views.sql
+run database/create-triggers.sql
 
 echo ">>> Base de datos 'smart_city' inicializada correctamente."

@@ -165,6 +165,47 @@ WHERE er.nombre = 'Disponible'
 ORDER BY puntos_penalizacion ASC, cantidad_asignaciones_historicas ASC;
 
 -- ============================================================================
+-- VISTAS DE SENSORES
+-- ============================================================================
+
+-- vSensoresMantenimiento: confianza derivada de cada sensor (R21) y necesidad de revisión.
+-- Confianza = 100 - (decaimiento_semanal * semanas desde la última revisión), con piso en 0.
+-- La "última revisión" es el MAX(fecha) en MantenimientoSensor o, si nunca se mantuvo, la fecha de instalación.
+CREATE OR REPLACE VIEW vSensoresMantenimiento AS
+SELECT
+    s.id_sensor,
+    s.nombre        AS sensor,
+    ts.nombre       AS tipo_sensor,
+    z.nombre        AS zona,
+    calc.ultima_revision,
+    calc.semanas_sin_mantenimiento,
+    calc.umbral_confianza,
+    (calc.umbral_confianza <= param.umbral_minimo) AS requiere_mantenimiento
+FROM Sensor s
+JOIN TipoSensor ts ON s.fk_tipo_sensor_id = ts.id_tipo_sensor
+JOIN Zona z        ON s.fk_zona_id        = z.id_zona
+CROSS JOIN LATERAL (
+    SELECT
+        COALESCE(
+            (SELECT MAX(m.fecha) FROM MantenimientoSensor m WHERE m.fk_sensor_id = s.id_sensor),
+            s.fecha_instalado
+        ) AS ultima_revision
+) ult
+CROSS JOIN LATERAL (
+    SELECT
+        ult.ultima_revision,
+        FLOOR((CURRENT_DATE - ult.ultima_revision) / 7) AS semanas_sin_mantenimiento,
+        GREATEST(0,
+            100 - (SELECT numero FROM ParametrosSistema WHERE nombre_parametro = 'SENSOR_DECAIMIENTO_CONFIANZA_SEMANAL')
+                  * FLOOR((CURRENT_DATE - ult.ultima_revision) / 7)
+        ) AS umbral_confianza
+) calc
+CROSS JOIN LATERAL (
+    SELECT (SELECT numero FROM ParametrosSistema WHERE nombre_parametro = 'SENSOR_UMBRAL_CONFIANZA_MINIMO') AS umbral_minimo
+) param
+ORDER BY calc.umbral_confianza ASC;
+
+-- ============================================================================
 -- VISTAS DE ASIGNACIONES Y AUDITORÍA
 -- ============================================================================
 

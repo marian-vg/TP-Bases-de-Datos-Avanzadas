@@ -5,7 +5,7 @@
 # levantable con: docker compose up -d
 #
 # En el primer arranque, PostgreSQL crea la base 'smart_city' y ejecuta
-# docker/init-db.sh, que carga estructura, datos y vistas.
+# docker/init-db.sh, que carga estructura, datos, vistas y triggers.
 # ============================================================================
 
 services:
