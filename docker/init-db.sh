@@ -14,7 +14,8 @@
 #      modificar los scripts SQL.
 #
 # create-database.sql no se utiliza aquí: la base la crea PostgreSQL a partir
-# de la variable POSTGRES_DB definida en docker-compose.yml.
+# de la variable POSTGRES_DB definida en docker-compose.yml. Solo se usa si 
+# el usuario que quiera ejecutar la DB no tiene acceso a docker.
 # ============================================================================
 
 set -e  # Aborta ante el primer comando con error; evita cargas a medias.

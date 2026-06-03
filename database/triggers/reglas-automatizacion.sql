@@ -2,10 +2,7 @@
 -- REGLAS ACTIVAS DE AUTOMATIZACIÓN — Smart City (PostgreSQL 16)
 -- =============================================================================================================
 --
--- Implementa las reglas de automatización del TP: R1, R2, R3, R4, R5, R7, R8, R9 y R21.
---
--- Este script es STANDALONE: NO se cablea en docker/init-db.sh ni en migrate.sql. Su propósito es ser
--- una implementación independiente para comparar más adelante contra database/create-triggers.sql.
+-- Implementación de las reglas de automatización del TP: R1, R2, R3, R4, R5, R7, R8, R9 y R21.
 --
 -- Convive con database/triggers/reglas-validadoras.sql (validaciones BEFORE de R8/R9/R10/R11). El orden
 -- de carga recomendado para probarlo es:
@@ -52,10 +49,6 @@
 -- Retorna la cantidad de recursos a asignar según la gravedad del incidente.
 -- Mapeo: Baja (1) y Moderada (2) -> 1 recurso; Alta (3) -> 2; Crítica (4) -> 3;
 --        Catastrófica (5) -> 4; cualquier otro -> 1 (fallback seguro).
---
--- TOC         -> Función auxiliar (sin trigger directo)
--- Granularidad -> N/A
--- Naming       -> fn_recursos_por_gravedad
 
 CREATE OR REPLACE FUNCTION fn_recursos_por_gravedad(p_id_gravedad INT)
 RETURNS INT AS $$
@@ -68,7 +61,8 @@ RETURNS INT AS $$
         ELSE 1
     END;
 $$ LANGUAGE sql IMMUTABLE;
-
+-- Al ser una funcion independiente, usamos IMMUTABLE. 
+-- Acá le decimos a Postgre que esta es determinística y siempre devuelve el mismo resultado.
 
 -- =============================================================================================================
 -- 2. fn_asignar_recursos_incidente — Motor reutilizable (R1 y otras reglas)
@@ -81,10 +75,6 @@ $$ LANGUAGE sql IMMUTABLE;
 --   d) no tengan una asignación activa (timestamp_finalizacion IS NULL)
 -- Devuelve la cantidad de filas efectivamente insertadas.
 -- NO verifica el umbral de recursos activos: esa responsabilidad es del llamador (R1).
---
--- TOC         -> Función auxiliar (sin trigger directo)
--- Granularidad -> N/A (operación set-based)
--- Naming       -> fn_asignar_recursos_incidente
 
 CREATE OR REPLACE FUNCTION fn_asignar_recursos_incidente(p_id_incidente INT, p_cantidad INT)
 RETURNS INT AS $$
@@ -142,10 +132,6 @@ $$ LANGUAGE plpgsql;
 -- por debajo del umbral UMBRAL_RECURSOS_ACTIVOS, default 50). Si hay capacidad, invoca el
 -- motor para despachar la cantidad de recursos que corresponde a la gravedad del incidente.
 -- Si se superó el umbral, el incidente queda en estado 'Pendiente' sin asignación.
---
--- TOC         -> AFTER INSERT
--- Granularidad -> FOR EACH ROW
--- Naming       -> fn_asignacion_automatica / trg_asignacion_automatica
 
 CREATE OR REPLACE FUNCTION fn_asignacion_automatica()
 RETURNS TRIGGER AS $$
@@ -193,10 +179,6 @@ EXECUTE FUNCTION fn_asignacion_automatica();
 --   R2: si el incidente asociado aún está en 'Pendiente', lo mueve a 'En proceso'.
 --       No se toca si el incidente ya está en cualquier otro estado posterior (En proceso,
 --       Escalado, etc.) para no pisar transiciones legítimas posteriores.
---
--- TOC         -> AFTER INSERT
--- Granularidad -> FOR EACH ROW
--- Naming       -> fn_asignacion_aplicada / trg_asignacion_aplicada
 
 CREATE OR REPLACE FUNCTION fn_asignacion_aplicada()
 RETURNS TRIGGER AS $$
@@ -238,11 +220,6 @@ EXECUTE FUNCTION fn_asignacion_aplicada();
 -- =============================================================================================================
 -- BLOQUE: GESTIÓN DE FINALIZACIÓN DE ASIGNACIONES (R8 + R4/R9 + R7)
 -- =============================================================================================================
---
--- TOC -> AFTER UPDATE ON Asignacion
--- Granularidad -> FOR EACH ROW
---
--- Naming -> fn_asignacion_finalizada / trg_asignacion_finalizada
 --
 -- Este trigger unifica tres reglas de automatización que se activan cuando una asignación
 -- cambia de estado (falla o finaliza). Las dos ramas son INDEPENDIENTES (no ELSIF) y cada
@@ -376,23 +353,6 @@ EXECUTE FUNCTION fn_asignacion_finalizada();
 -- ============================================================================
 -- BLOQUE 3: AUDITORÍA GENÉRICA (R3) + CONFIABILIDAD DE SENSORES (R21)
 -- ============================================================================
---
--- TOC
---   1. fn_confianza_sensor        — calcula confianza de un sensor (R21, valor derivado)
---   2. fn_auditoria               — función genérica de auditoría (R3)
---      trg_audit_incidente        — audita tabla Incidente
---      trg_audit_asignacion       — audita tabla Asignacion
---      trg_audit_recurso          — audita tabla Recurso
---      trg_audit_penalizacion     — audita tabla Penalizacion
---      trg_audit_evento           — audita tabla Evento
---   3. fn_evento_promocion        — promueve evento a incidente si el sensor es confiable (R21)
---      trg_evento_promocion       — AFTER INSERT ON Evento
---
--- Granularidad: FOR EACH ROW en todos los triggers.
--- Naming: funciones fn_*, triggers trg_*.
--- ============================================================================
-
-
 -- ============================================================================
 -- 1. fn_confianza_sensor — R21 (valor derivado)
 -- ============================================================================
@@ -435,9 +395,6 @@ $$ LANGUAGE plpgsql;
 -- ============================================================================
 -- 2. fn_auditoria — R3 (auditoría genérica, un trigger por tabla)
 -- ============================================================================
---
--- TOC: AFTER INSERT OR UPDATE OR DELETE
--- Granularidad: FOR EACH ROW
 --
 -- Recibe el nombre de la columna PK de cada tabla como TG_ARGV[0].
 -- Extrae el valor de la PK desde el registro NEW o OLD según la operación.
@@ -516,9 +473,6 @@ EXECUTE FUNCTION fn_auditoria('id_evento');
 -- ============================================================================
 -- 3. fn_evento_promocion + trg_evento_promocion — R21
 -- ============================================================================
---
--- TOC: AFTER INSERT ON Evento
--- Granularidad: FOR EACH ROW
 --
 -- Evalúa la confianza del sensor que generó el evento.
 -- Si la confianza es <= umbral: registra en Log y NO crea incidente.
