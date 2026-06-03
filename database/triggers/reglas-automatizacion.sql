@@ -16,6 +16,8 @@
 --   R5     Cantidad de recursos según gravedad (Baja/Moderada=1, Alta=2, Crítica=3, Catastrófica=4).
 --   R7     Cierre automático del incidente ('Resuelto') cuando finalizan todas sus asignaciones.
 --   R8     Estado del recurso según su asignación ('Disponible' <-> 'Ocupado').
+--   R14    Selección del mejor recurso: el motor ordena los candidatos por Recurso.puntaje DESC.
+--          El puntaje lo mantiene database/triggers/reglas-inteligencia.sql (cargar ANTES que este).
 --   R21    Promoción de evento a incidente solo si la confianza del sensor supera el umbral y el
 --          tipo de evento deriva a UN único tipo de incidente (TipoEventoTipoIncidente).
 --
@@ -73,6 +75,10 @@ $$ LANGUAGE sql IMMUTABLE;
 --   b) su tipo sea aplicable al tipo del incidente (TipoIncidenteTipoRecurso)
 --   c) estén habilitados para operar en la zona del incidente (ZonaRecurso)
 --   d) no tengan una asignación activa (timestamp_finalizacion IS NULL)
+-- R14 (Selección del mejor recurso): entre los candidatos válidos, prioriza el de MAYOR puntaje
+--   de desempeño (Recurso.puntaje, mantenido por reglas-inteligencia.sql). Como el puntaje viene
+--   precalculado, R14 es solo el criterio de orden: no recorre historial al asignar. De yapa, la
+--   reasignación por falla (R4) termina prefiriendo recursos menos penalizados sin lógica extra.
 -- Devuelve la cantidad de filas efectivamente insertadas.
 -- NO verifica el umbral de recursos activos: esa responsabilidad es del llamador (R1).
 
@@ -115,7 +121,7 @@ BEGIN
           WHERE a.fk_recurso_id = r.id_recurso
             AND a.timestamp_finalizacion IS NULL
       )
-    ORDER BY r.id_recurso
+    ORDER BY r.puntaje DESC, r.id_recurso   -- R14: mejor desempeño primero; id_recurso desempata
     LIMIT p_cantidad;
 
     GET DIAGNOSTICS v_insertados = ROW_COUNT;

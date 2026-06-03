@@ -1,8 +1,8 @@
 id,nombre,puntaje
-1,Demora leve,5
-2,Demora moderada,15
-3,Demora grave,25
-4,Falla en intervención,30
-5,Abandono de servicio,40
-6,No respuesta,50
-7,Error de procedimiento,20
+1,Demora leve,1
+2,Demora moderada,2
+3,Demora grave,3
+4,Falla en intervención,4
+5,Abandono de servicio,5
+6,No respuesta,5
+7,Error de procedimiento,2

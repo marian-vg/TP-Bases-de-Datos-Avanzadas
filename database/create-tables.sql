@@ -121,7 +121,12 @@ CREATE TABLE Recurso (
     fk_tipo_recurso_id INT NOT NULL,
     fk_zona_base_id INT NOT NULL, -- Representa su base física/pertenencia original
     fk_estado_recurso_id INT NOT NULL,
-    CONSTRAINT fk_recurso_tipo FOREIGN KEY (fk_tipo_recurso_id) 
+    -- Valor DERIVADO mantenido por triggers (R14, ver database/triggers/reglas-inteligencia.sql).
+    -- Mide el desempeño histórico del recurso: sube con asignaciones exitosas, rachas y
+    -- cumplimiento de SLA; baja con penalizaciones. El motor de asignación elige el de mayor puntaje.
+    -- Arranca en 0 (el dataset base no trae historial operativo). Puede ser negativo.
+    puntaje INT NOT NULL DEFAULT 0,
+    CONSTRAINT fk_recurso_tipo FOREIGN KEY (fk_tipo_recurso_id)
         REFERENCES TipoRecurso(id_tipo_recurso) ON DELETE RESTRICT,
     CONSTRAINT fk_recurso_zona_base FOREIGN KEY (fk_zona_base_id) 
         REFERENCES Zona(id_zona) ON DELETE RESTRICT,
