@@ -153,6 +153,19 @@ CREATE TABLE TipoIncidenteTipoRecurso (
         REFERENCES TipoRecurso(id_tipo_recurso) ON DELETE CASCADE
 );
 
+-- Tabla intermedia (M:N) que mapea qué tipos de incidente puede derivar un tipo de evento (R21).
+-- fk_gravedad_id es la gravedad sugerida del incidente derivado. La auto-creación de incidente
+-- solo ocurre cuando un tipo de evento deriva a UN ÚNICO tipo de incidente (sin adivinanzas).
+CREATE TABLE TipoEventoTipoIncidente (
+    fk_tipo_evento_id    INT NOT NULL,
+    fk_tipo_incidente_id INT NOT NULL,
+    fk_gravedad_id       INT NOT NULL,
+    PRIMARY KEY (fk_tipo_evento_id, fk_tipo_incidente_id),
+    CONSTRAINT fk_teti_evento    FOREIGN KEY (fk_tipo_evento_id)    REFERENCES TipoEvento(id_tipo_evento)       ON DELETE CASCADE,
+    CONSTRAINT fk_teti_incidente FOREIGN KEY (fk_tipo_incidente_id) REFERENCES TipoIncidente(id_tipo_incidente) ON DELETE CASCADE,
+    CONSTRAINT fk_teti_gravedad  FOREIGN KEY (fk_gravedad_id)       REFERENCES Gravedad(id_gravedad)            ON DELETE RESTRICT
+);
+
 -- ============================================================================
 -- 4. TABLAS DE EVENTOS E INCIDENTES
 -- ============================================================================

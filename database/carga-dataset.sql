@@ -96,6 +96,9 @@
 -- 16. Tipos de recurso aplicables por tipo de incidente (M:N para asignación correcta)
 \copy TipoIncidenteTipoRecurso (fk_tipo_incidente_id, fk_tipo_recurso_id) FROM 'data/16_tipo_incidente_tipo_recurso.csv' WITH (FORMAT csv, HEADER true, DELIMITER ',');
 
+-- 17. Tipos de incidente que puede derivar un tipo de evento (M:N para auto-promoción R21)
+\copy TipoEventoTipoIncidente (fk_tipo_evento_id, fk_tipo_incidente_id, fk_gravedad_id) FROM 'data/17_tipo_evento_tipo_incidente.csv' WITH (FORMAT csv, HEADER true, DELIMITER ',');
+
 -- ============================================================================
 -- 3. FECHAS DE SENSORES RELATIVAS A HOY (generadas, no provienen del CSV)
 -- ============================================================================
