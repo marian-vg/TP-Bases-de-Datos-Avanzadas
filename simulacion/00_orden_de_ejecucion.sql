@@ -1,0 +1,19 @@
+-- =============================================================================
+-- SIMULACIONES - ORDEN SUGERIDO
+-- =============================================================================
+-- Requisito: base smart_city con migrate.sql (tablas, datos, vistas, triggers).
+--
+-- Ejecutar cada archivo por separado, en este orden:
+--
+--   01_caso_basico_asignacion_automatica.sql
+--   02_caso_basico_cambio_estados.sql
+--   03_caso_intermedio_falta_recursos.sql
+--   04_caso_intermedio_incidentes_multiples.sql
+--   05_caso_avanzado_escalamiento.sql
+--   06_caso_avanzado_penalizaciones.sql
+--   07_caso_avanzado_bloqueo_recursos.sql
+--   08_simulacion_20_incidentes.sql
+--
+-- Cada script limpia las tablas operativas al inicio (no toca catalogos ni recursos base).
+-- Conexion Docker: psql -h localhost -p 5433 -U postgres -d smart_city
+-- =============================================================================

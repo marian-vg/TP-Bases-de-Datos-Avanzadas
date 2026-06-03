@@ -80,8 +80,9 @@
 -- 11. Tipo de Penalización
 \copy TipoPenalizacion (id_tipo_penalizacion, nombre, puntaje) FROM 'data/11_tipo_penalizacion.csv' WITH (FORMAT csv, HEADER true, DELIMITER ',');
 
--- 12. Sensor (Dispositivos IoT - Contiene fechas de mantenimiento nulas)
-\copy Sensor (id_sensor, fk_tipo_sensor_id, fk_zona_id, marca, modelo, nombre, fecha_instalado, fecha_mantenimiento) FROM 'data/12_sensor.csv' WITH (FORMAT csv, HEADER true, DELIMITER ',', NULL '');
+-- 12. Sensor (Dispositivos IoT). Las fechas (instalación y mantenimiento) NO provienen del CSV:
+--     se generan más abajo, relativas a CURRENT_DATE, para que el dataset no caduque con el tiempo.
+\copy Sensor (id_sensor, fk_tipo_sensor_id, fk_zona_id, marca, modelo, nombre) FROM 'data/12_sensor.csv' WITH (FORMAT csv, HEADER true, DELIMITER ',', NULL '');
 
 -- 13. Recurso Operativo
 \copy Recurso (id_recurso, fk_tipo_recurso_id, fk_zona_base_id, fk_estado_recurso_id) FROM 'data/13_recurso.csv' WITH (FORMAT csv, HEADER true, DELIMITER ',');
@@ -91,3 +92,29 @@
 
 -- 15. Parámetros Globales del Sistema
 \copy ParametrosSistema (nombre_parametro, numero) FROM 'data/15_parametros_sistema.csv' WITH (FORMAT csv, HEADER true, DELIMITER ',');
+
+-- 16. Tipos de recurso aplicables por tipo de incidente (M:N para asignación correcta)
+\copy TipoIncidenteTipoRecurso (fk_tipo_incidente_id, fk_tipo_recurso_id) FROM 'data/16_tipo_incidente_tipo_recurso.csv' WITH (FORMAT csv, HEADER true, DELIMITER ',');
+
+-- 17. Tipos de incidente que puede derivar un tipo de evento (M:N para auto-promoción R21)
+\copy TipoEventoTipoIncidente (fk_tipo_evento_id, fk_tipo_incidente_id, fk_gravedad_id) FROM 'data/17_tipo_evento_tipo_incidente.csv' WITH (FORMAT csv, HEADER true, DELIMITER ',');
+
+-- ============================================================================
+-- 3. FECHAS DE SENSORES RELATIVAS A HOY (generadas, no provienen del CSV)
+-- ============================================================================
+-- Las fechas se generan relativas a CURRENT_DATE para que la confianza de los
+-- sensores (R21) no caduque con el paso del tiempo. El setseed() fijo mantiene
+-- el dataset reproducible para todo el equipo (misma base en cada carga).
+SELECT setseed(0.42);
+
+-- Instalación: en algún momento dentro de los últimos ~5 años.
+UPDATE Sensor SET fecha_instalado = CURRENT_DATE - (random() * 1825)::int;
+
+-- ~40% de los sensores tiene al menos un mantenimiento, dentro de las últimas ~12
+-- semanas (GREATEST evita que sea anterior a la instalación). Así siempre hay
+-- sensores de alta confianza capaces de generar incidentes.
+INSERT INTO MantenimientoSensor (fk_sensor_id, fecha)
+SELECT id_sensor, GREATEST(fecha_instalado, CURRENT_DATE - (random() * 84)::int)
+FROM Sensor
+WHERE random() < 0.4
+ORDER BY id_sensor;

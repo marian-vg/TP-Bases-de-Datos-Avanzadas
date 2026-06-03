@@ -96,12 +96,24 @@ CREATE TABLE Sensor (
     marca VARCHAR(100),
     modelo VARCHAR(100),
     nombre VARCHAR(100) NOT NULL,
-    fecha_instalado DATE NOT NULL,
-    fecha_mantenimiento DATE,
-    CONSTRAINT fk_sensor_tipo FOREIGN KEY (fk_tipo_sensor_id) 
+    -- La fecha de instalación se genera en la carga relativa a CURRENT_DATE (ver carga-dataset.sql),
+    -- para que el modelo de confianza (R21) no caduque con el paso del tiempo.
+    fecha_instalado DATE NOT NULL DEFAULT CURRENT_DATE,
+    -- La última fecha de mantenimiento NO se almacena: se deriva de MAX(fecha) en MantenimientoSensor (R21).
+    CONSTRAINT fk_sensor_tipo FOREIGN KEY (fk_tipo_sensor_id)
         REFERENCES TipoSensor(id_tipo_sensor) ON DELETE RESTRICT,
-    CONSTRAINT fk_sensor_zona FOREIGN KEY (fk_zona_id) 
+    CONSTRAINT fk_sensor_zona FOREIGN KEY (fk_zona_id)
         REFERENCES Zona(id_zona) ON DELETE RESTRICT
+);
+
+-- Historial de mantenimientos de cada sensor (R21).
+-- La confianza de un sensor parte de 100% y se reconstruye desde la última fecha registrada aquí.
+CREATE TABLE MantenimientoSensor (
+    id_mantenimiento SERIAL PRIMARY KEY,
+    fk_sensor_id INT NOT NULL,
+    fecha DATE NOT NULL DEFAULT CURRENT_DATE,
+    CONSTRAINT fk_mantenimiento_sensor FOREIGN KEY (fk_sensor_id)
+        REFERENCES Sensor(id_sensor) ON DELETE CASCADE
 );
 
 CREATE TABLE Recurso (
@@ -109,7 +121,12 @@ CREATE TABLE Recurso (
     fk_tipo_recurso_id INT NOT NULL,
     fk_zona_base_id INT NOT NULL, -- Representa su base física/pertenencia original
     fk_estado_recurso_id INT NOT NULL,
-    CONSTRAINT fk_recurso_tipo FOREIGN KEY (fk_tipo_recurso_id) 
+    -- Valor DERIVADO mantenido por triggers (R14, ver database/triggers/reglas-inteligencia.sql).
+    -- Mide el desempeño histórico del recurso: sube con asignaciones exitosas, rachas y
+    -- cumplimiento de SLA; baja con penalizaciones. El motor de asignación elige el de mayor puntaje.
+    -- Arranca en 0 (el dataset base no trae historial operativo). Puede ser negativo.
+    puntaje INT NOT NULL DEFAULT 0,
+    CONSTRAINT fk_recurso_tipo FOREIGN KEY (fk_tipo_recurso_id)
         REFERENCES TipoRecurso(id_tipo_recurso) ON DELETE RESTRICT,
     CONSTRAINT fk_recurso_zona_base FOREIGN KEY (fk_zona_base_id) 
         REFERENCES Zona(id_zona) ON DELETE RESTRICT,
@@ -122,10 +139,36 @@ CREATE TABLE ZonaRecurso (
     id_zona INT NOT NULL,
     id_recurso INT NOT NULL,
     PRIMARY KEY (id_zona, id_recurso),
-    CONSTRAINT fk_zonarecurso_zona FOREIGN KEY (id_zona) 
+    CONSTRAINT fk_zonarecurso_zona FOREIGN KEY (id_zona)
         REFERENCES Zona(id_zona) ON DELETE CASCADE,
-    CONSTRAINT fk_zonarecurso_recurso FOREIGN KEY (id_recurso) 
+    CONSTRAINT fk_zonarecurso_recurso FOREIGN KEY (id_recurso)
         REFERENCES Recurso(id_recurso) ON DELETE CASCADE
+);
+
+-- Tabla intermedia (M:N) que define qué tipos de recurso son aplicables a cada tipo de incidente.
+-- El motor de asignación solo despacha recursos cuyo tipo esté habilitado aquí para el incidente
+-- (un incendio NO recibe un patrullero). Habilita además la asignación múltiple de R5 con tipos correctos.
+CREATE TABLE TipoIncidenteTipoRecurso (
+    fk_tipo_incidente_id INT NOT NULL,
+    fk_tipo_recurso_id INT NOT NULL,
+    PRIMARY KEY (fk_tipo_incidente_id, fk_tipo_recurso_id),
+    CONSTRAINT fk_titr_incidente FOREIGN KEY (fk_tipo_incidente_id)
+        REFERENCES TipoIncidente(id_tipo_incidente) ON DELETE CASCADE,
+    CONSTRAINT fk_titr_recurso FOREIGN KEY (fk_tipo_recurso_id)
+        REFERENCES TipoRecurso(id_tipo_recurso) ON DELETE CASCADE
+);
+
+-- Tabla intermedia (M:N) que mapea qué tipos de incidente puede derivar un tipo de evento (R21).
+-- fk_gravedad_id es la gravedad sugerida del incidente derivado. La auto-creación de incidente
+-- solo ocurre cuando un tipo de evento deriva a UN ÚNICO tipo de incidente (sin adivinanzas).
+CREATE TABLE TipoEventoTipoIncidente (
+    fk_tipo_evento_id    INT NOT NULL,
+    fk_tipo_incidente_id INT NOT NULL,
+    fk_gravedad_id       INT NOT NULL,
+    PRIMARY KEY (fk_tipo_evento_id, fk_tipo_incidente_id),
+    CONSTRAINT fk_teti_evento    FOREIGN KEY (fk_tipo_evento_id)    REFERENCES TipoEvento(id_tipo_evento)       ON DELETE CASCADE,
+    CONSTRAINT fk_teti_incidente FOREIGN KEY (fk_tipo_incidente_id) REFERENCES TipoIncidente(id_tipo_incidente) ON DELETE CASCADE,
+    CONSTRAINT fk_teti_gravedad  FOREIGN KEY (fk_gravedad_id)       REFERENCES Gravedad(id_gravedad)            ON DELETE RESTRICT
 );
 
 -- ============================================================================
