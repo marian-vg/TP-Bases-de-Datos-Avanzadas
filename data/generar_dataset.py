@@ -44,7 +44,8 @@ estados_incidente = [
     (2, "En proceso"),
     (3, "Resuelto"),
     (4, "Escalado"),
-    (5, "Cancelado"),
+    (5, "En espera"),    # R20: capacidad del sistema
+    (6, "Cancelado"),
 ]
 
 # ----- Gravedad (1 a 5) -----
@@ -184,14 +185,18 @@ for zona_id, _, _ in zonas:
         marca = random.choice(marcas_sensor)
         modelo = gen_modelo()
         nombre = f"SEN-{zona_id:02d}-{sensor_id:04d}"
-        # Las fechas de instalación y mantenimiento NO se guardan en el CSV: se generan
-        # en carga-dataset.sql relativas a CURRENT_DATE (para que el dataset no caduque).
-        # Igual consumimos los mismos valores aleatorios, para no alterar el resto del
-        # dataset (recursos y zona_recurso, que vienen después en el mismo stream).
         fecha_inst = fecha_aleatoria(date(2020, 1, 1), date(2025, 6, 30))
+        # 40% de los sensores tiene fecha de mantenimiento, el resto NULL
         if random.random() < 0.4:
-            _ = fecha_aleatoria(fecha_inst, date(2026, 5, 1))
-        sensores.append((sensor_id, tipo_id, zona_id, marca, modelo, nombre))
+            fecha_mant = fecha_aleatoria(fecha_inst, date(2026, 5, 1))
+            fecha_mant_str = fecha_mant.isoformat()
+        else:
+            fecha_mant_str = ""  # NULL en CSV
+        sensores.append((
+            sensor_id, tipo_id, zona_id,
+            marca, modelo, nombre,
+            fecha_inst.isoformat(), fecha_mant_str
+        ))
         sensor_id += 1
 
 # =============================================================================
@@ -263,40 +268,16 @@ for recurso_id_x, _, zona_base, _ in recursos:
 # 6. ParametrosSistema (parámetros configurables del sistema)
 # =============================================================================
 parametros = [
-    ("UMBRAL_INCIDENTES_ACTIVOS",            "50"),   # R20: capacidad del sistema
-    ("MAX_RECURSOS_POR_INCIDENTE",           "5"),
-    ("MIN_RECURSOS_INCIDENTE_CRITICO",       "2"),    # R5: asignación múltiple
-    ("PUNTAJE_BLOQUEO_RECURSO",              "75"),   # bloquear recurso si suma X puntos
-    ("MINUTOS_REACTIVACION_RECURSO",         "60"),   # R17: reactivación automática
-    ("MINUTOS_DUPLICADO_INCIDENTE",          "10"),   # R11: ventana de duplicación
-    ("GRAVEDAD_MINIMA_CRITICA",              "4"),    # de qué nivel se considera crítico
-    ("BONUS_PRIORIDAD_ZONA_RIESGO",          "10"),   # R13: extra por zona de riesgo alto
-    ("MINUTOS_REVISION_SENSOR",              "90"),   # cada cuánto debe revisarse un sensor
-    ("ESCALAR_FACTOR_GRAVEDAD",              "1"),    # R16: cuánto sube la gravedad al escalar
-    ("SENSOR_DECAIMIENTO_CONFIANZA_SEMANAL", "5"),    # R21: % de confianza que pierde el sensor por semana
-    ("SENSOR_UMBRAL_CONFIANZA_MINIMO",       "80"),   # R21: confianza mínima para generar incidente
-]
-
-# =============================================================================
-# 7. TipoIncidenteTipoRecurso (qué tipos de recurso aplican a cada tipo de incidente)
-# =============================================================================
-# Define la flota válida por tipo de incidente. El motor de asignación solo
-# despacha recursos cuyo tipo figure aquí (un incendio no recibe un patrullero).
-tipo_incidente_tipo_recurso = [
-    (1, 1), (1, 2), (1, 5), (1, 6),          # Accidente de tránsito
-    (2, 3), (2, 1), (2, 7),                   # Incendio estructural
-    (3, 4), (3, 3), (3, 7),                   # Incendio forestal
-    (4, 1), (4, 2), (4, 12),                  # Emergencia médica
-    (5, 5),                                   # Robo / Asalto
-    (6, 5), (6, 2),                           # Violencia doméstica
-    (7, 5), (7, 7),                           # Disturbios
-    (8, 8), (8, 3), (8, 7),                   # Fuga de gas
-    (9, 9), (9, 10),                          # Corte de energía
-    (10, 7), (10, 10), (10, 11),             # Inundación urbana
-    (11, 7), (11, 3), (11, 1),               # Derrumbe
-    (12, 5), (12, 7),                         # Persona desaparecida
-    (13, 7), (13, 8), (13, 3), (13, 1),      # Materiales peligrosos
-    (14, 11), (14, 1), (14, 7),              # Rescate acuático
+    ("UMBRAL_INCIDENTES_ACTIVOS",       "50"),    # R20: capacidad del sistema
+    ("MAX_RECURSOS_POR_INCIDENTE",      "5"),
+    ("MIN_RECURSOS_INCIDENTE_CRITICO",  "2"),     # R5: asignación múltiple
+    ("PUNTAJE_BLOQUEO_RECURSO",         "75"),    # bloquear recurso si suma X puntos
+    ("MINUTOS_REACTIVACION_RECURSO",    "60"),    # R17: reactivación automática
+    ("MINUTOS_DUPLICADO_INCIDENTE",     "10"),    # R11: ventana de duplicación
+    ("GRAVEDAD_MINIMA_CRITICA",         "4"),     # de qué nivel se considera crítico
+    ("BONUS_PRIORIDAD_ZONA_RIESGO",     "10"),    # R13: extra por zona de riesgo alto
+    ("MINUTOS_REVISION_SENSOR",         "90"),    # cada cuánto debe revisarse un sensor
+    ("ESCALAR_FACTOR_GRAVEDAD",         "1"),     # R16: cuánto sube la gravedad al escalar
 ]
 
 # =============================================================================
@@ -306,7 +287,7 @@ tipo_incidente_tipo_recurso = [
 def write_csv(filename, header, rows):
     path = OUT / filename
     with open(path, "w", newline="", encoding="utf-8") as f:
-        w = csv.writer(f, quoting=csv.QUOTE_MINIMAL, lineterminator="\n")
+        w = csv.writer(f, quoting=csv.QUOTE_MINIMAL)
         w.writerow(header)
         w.writerows(rows)
     print(f"  {filename:35s}  {len(rows):>5d} filas")
@@ -347,7 +328,8 @@ write_csv("11_tipo_penalizacion.csv",
           ["id", "nombre", "puntaje"], tipos_penalizacion)
 
 write_csv("12_sensor.csv",
-          ["id", "tipo_sensor_id", "zona_id", "marca", "modelo", "nombre"], sensores)
+          ["id", "tipo_sensor_id", "zona_id", "marca", "modelo", "nombre",
+           "fecha_instalado", "fecha_mantenimiento"], sensores)
 
 write_csv("13_recurso.csv",
           ["id", "tipo_recurso_id", "zona_id", "estado_recurso_id"], recursos)
@@ -358,9 +340,6 @@ write_csv("14_zona_recurso.csv",
 write_csv("15_parametros_sistema.csv",
           ["nombre_parametro", "valor"], parametros)
 
-write_csv("16_tipo_incidente_tipo_recurso.csv",
-          ["tipo_incidente_id", "tipo_recurso_id"], tipo_incidente_tipo_recurso)
-
 # =============================================================================
 # RESUMEN
 # =============================================================================
@@ -369,7 +348,6 @@ print(f"  Zonas:                {len(zonas)}")
 print(f"  Sensores totales:     {len(sensores)}")
 print(f"  Recursos totales:     {len(recursos)}")
 print(f"  Filas zona_recurso:   {len(zona_recurso)}")
-print(f"  Mapeos inc/recurso:   {len(tipo_incidente_tipo_recurso)}")
 
 # Distribución de sensores por zona
 print("\n  Distribución sensores por zona:")
