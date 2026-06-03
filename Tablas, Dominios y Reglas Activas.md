@@ -17,20 +17,22 @@
 **Asignacion**(PK id, FK recurso\_id, FK incidente\_id, timestamp\_asignacion, NULL timestamp\_llegada, timestamp\_finalizacion NULL, estado\_exito)  
 **TipoPenalizacion**(PKid, nombre, puntaje)  
 **Penalizacion**(PKid, FKrecurso\_id, FKtipo\_penalizacion\_id, fecha, hora, motivo)  
-**Log**(PKid, tablaAfectada, idTablaAfectada, detalle, timestamp)
-
-**Tablas nuevas que fui descubriendo:**
-
+**Log**(PKid, tablaAfectada, idTablaAfectada, detalle, timestamp)  
+**Mantenimiento(**FK idSensor, fecha)  
 **ZonaRecurso** (PKFK idZona, PKFK idRecurso)  
 **RecursoFuera**(PKFK idRecurso, fecha\_salida, fecha\_reincorporacion)  
-**ParametrosSistema**(PK NombreParametro, Número
+**ParametrosSistema**(PK NombreParametro, Número)  
+**TipoIncidenteTipoRecurso(**FKPK idTipoIncidente, FKPK idTipoRecurso) *Tabla que relaciona qué recursos se pueden asignar a determinado incidente*
 
 Log guarda el historial de cada requerimiento que pide el TP.  
 Para no tener que crear una tabla por entidad a futuro, el Log ahora utiliza tablaAfectada para ver qué tabla tuvo el cambio. De la otra forma seria muy poco escalable.
 
-# Dominios
-
 # Reglas activas
+
+Guía visual:   
+Regla sin implementar  
+Regla en proceso  
+Regla implementada
 
 ## 7.2 Reglas de Automatización (Tomchad)
 
@@ -58,6 +60,15 @@ Cuando todos los recursos asignados finalicen su intervención, el incidente deb
 automáticamente a estado “Resuelto”.  
 R8. Cambiar estado de los recursos automáticamente según su asignación.  
 R9: Generar penalizaciones automaticamente segun si fallo en asignarse el recurso o tardo en responder.
+
+R21. Confiabilidad de sensores por mantenimiento (umbral de confianza)  
+Cada sensor posee un umbral de confianza que refleja la fiabilidad de sus lecturas:  
+• Un sensor recién instalado o recién mantenido parte del 100% de confianza.  
+• Por cada semana sin mantenimiento, la confianza decae un 5%.  
+• Cada mantenimiento registrado restablece la confianza al 100%.  
+Cuando un sensor genera un evento, el sistema solo lo promoverá a incidente si su umbral de confianza es mayor al 80%.  
+Por debajo de ese valor, el evento se considera de baja fiabilidad (posible falso positivo por falta de mantenimiento) y se registra únicamente en el Log, sin generar incidente.  
+Nota de diseño: el umbral es un valor derivado, calculado en tiempo real a partir de fecha\_instalado y fecha\_mantenimiento. 
 
 ## 7.3 Reglas de Validación (Mariano aura)
 
@@ -157,5 +168,6 @@ Son consultas predefinidas con un nombre asignado.
 * vRecursosCandidatos: *Listado por ID de recursos DISPONIBLES, con Carga de Trabajo (hs, dias, no se), y Ranking de Rendimiento (Puntaje). Utilizado para calcular asignación de recursos.*  
 * vHistorialAsignaciones  
 * vHistorialTriggers  
-* vZonasIncidentadas
+* vZonasIncidentadas  
+* vRecursosActivosZonas: En tiempo real, vista de donde estan realmente ubicados los recursos activos. Por si salen de sus zonas.
 
