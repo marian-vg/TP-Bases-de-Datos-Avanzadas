@@ -18,6 +18,7 @@ BEGIN;
 \ir 06_saturacion_rebalanceo.sql
 \ir 07_brechas_conocidas.sql
 \ir 08_simulacion_20_incidentes.sql
+\ir 09_reporte_operativo.sql
 
 SELECT (count(*) FILTER (WHERE estado = 'FAIL') > 0)::int AS sim_tiene_fallos
 FROM sim_resultado
