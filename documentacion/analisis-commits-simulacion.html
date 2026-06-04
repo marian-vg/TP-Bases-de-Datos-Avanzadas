@@ -1,0 +1,920 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Documentacion tecnica completa, commit por commit, de la nueva simulacion profesional Smart City.">
+  <title>Smart City / Dossier de la simulacion profesional</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Manrope:wght@400;500;600;700;800&family=Newsreader:opsz,wght@6..72,500;6..72,650&display=swap');
+
+    :root {
+      --paper: #f4f1e9;
+      --paper-2: #ebe6da;
+      --ink: #20211d;
+      --muted: #6d6d63;
+      --line: #c9c2b3;
+      --line-soft: rgba(62, 61, 53, .13);
+      --accent: #b34f32;
+      --accent-soft: #ead0c5;
+      --green: #426b57;
+      --blue: #496778;
+      --surface: rgba(255, 253, 247, .72);
+      --shadow: 0 24px 70px rgba(60, 54, 43, .08);
+      --max: 1480px;
+    }
+
+    [data-theme="dark"] {
+      --paper: #181a17;
+      --paper-2: #20231e;
+      --ink: #e7e4da;
+      --muted: #a7a79b;
+      --line: #4b4c44;
+      --line-soft: rgba(239, 235, 222, .11);
+      --accent: #d68161;
+      --accent-soft: #543226;
+      --green: #82aa93;
+      --blue: #86a2ae;
+      --surface: rgba(34, 36, 31, .82);
+      --shadow: 0 24px 70px rgba(0, 0, 0, .22);
+    }
+
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      color: var(--ink);
+      background:
+        radial-gradient(circle at 82% 4%, color-mix(in srgb, var(--accent-soft) 48%, transparent), transparent 26rem),
+        linear-gradient(90deg, transparent 49.8%, var(--line-soft) 50%, transparent 50.2%),
+        var(--paper);
+      font-family: "Manrope", sans-serif;
+      line-height: 1.68;
+      transition: background-color .25s ease, color .25s ease;
+    }
+
+    body::before {
+      content: "";
+      position: fixed;
+      inset: 0;
+      z-index: 20;
+      pointer-events: none;
+      opacity: .12;
+      background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 180 180' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.8' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.18'/%3E%3C/svg%3E");
+    }
+
+    button, input { font: inherit; }
+    button { color: inherit; }
+    a { color: inherit; }
+    code, .mono { font-family: "IBM Plex Mono", monospace; }
+
+    .reading-progress {
+      position: fixed;
+      inset: 0 auto auto 0;
+      z-index: 30;
+      width: 0;
+      height: 3px;
+      background: var(--accent);
+      transition: width .08s linear;
+    }
+
+    .topbar {
+      position: sticky;
+      top: 0;
+      z-index: 15;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 1rem;
+      min-height: 66px;
+      padding: .7rem clamp(1rem, 3vw, 3rem);
+      border-bottom: 1px solid var(--line-soft);
+      background: color-mix(in srgb, var(--paper) 86%, transparent);
+      backdrop-filter: blur(18px);
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: .8rem;
+      font-size: .74rem;
+      font-weight: 800;
+      letter-spacing: .14em;
+      text-transform: uppercase;
+    }
+
+    .brand-mark {
+      position: relative;
+      width: 24px;
+      height: 24px;
+      border: 1px solid var(--ink);
+      border-radius: 50%;
+    }
+
+    .brand-mark::before,
+    .brand-mark::after {
+      content: "";
+      position: absolute;
+      background: var(--accent);
+    }
+    .brand-mark::before { inset: 4px 10px; }
+    .brand-mark::after { inset: 10px 4px; }
+
+    .toolbar { display: flex; gap: .5rem; }
+    .icon-button {
+      display: inline-grid;
+      place-items: center;
+      width: 38px;
+      height: 38px;
+      padding: 0;
+      border: 1px solid var(--line);
+      border-radius: 50%;
+      background: transparent;
+      cursor: pointer;
+      transition: transform .2s ease, border-color .2s ease, background .2s ease;
+    }
+    .icon-button:hover { border-color: var(--accent); background: var(--surface); transform: translateY(-2px); }
+    .icon-button:active { transform: translateY(0) scale(.96); }
+    .icon-button svg { width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-width: 1.7; }
+
+    .hero {
+      display: grid;
+      grid-template-columns: minmax(0, 1.55fr) minmax(270px, .7fr);
+      gap: clamp(3rem, 8vw, 9rem);
+      max-width: var(--max);
+      min-height: min(790px, calc(100dvh - 66px));
+      margin: 0 auto;
+      padding: clamp(5rem, 11vw, 10rem) clamp(1.2rem, 5vw, 5rem) 5rem;
+      align-items: end;
+    }
+
+    .eyebrow {
+      display: flex;
+      align-items: center;
+      gap: .75rem;
+      margin-bottom: 1.4rem;
+      color: var(--accent);
+      font-family: "IBM Plex Mono", monospace;
+      font-size: .7rem;
+      font-weight: 500;
+      letter-spacing: .14em;
+      text-transform: uppercase;
+    }
+    .eyebrow::before { content: ""; width: 36px; height: 1px; background: currentColor; }
+
+    h1, h2, h3 { margin: 0; line-height: 1.02; }
+    h1 {
+      max-width: 900px;
+      font-family: "Newsreader", serif;
+      font-size: clamp(4rem, 9vw, 9.8rem);
+      font-weight: 500;
+      letter-spacing: -.065em;
+    }
+    h1 em { color: var(--accent); font-style: italic; }
+    .hero-lede {
+      max-width: 700px;
+      margin: 2.2rem 0 0;
+      color: var(--muted);
+      font-size: clamp(1.05rem, 1.5vw, 1.3rem);
+    }
+
+    .hero-facts {
+      align-self: center;
+      border-top: 1px solid var(--line);
+    }
+    .fact {
+      display: grid;
+      grid-template-columns: 72px 1fr;
+      gap: 1rem;
+      padding: 1.2rem 0;
+      border-bottom: 1px solid var(--line);
+    }
+    .fact-value {
+      color: var(--accent);
+      font-family: "Newsreader", serif;
+      font-size: 2rem;
+      line-height: 1;
+    }
+    .fact-label { color: var(--muted); font-size: .78rem; line-height: 1.45; }
+
+    .layout {
+      display: grid;
+      grid-template-columns: 280px minmax(0, 1fr);
+      gap: clamp(2rem, 5vw, 6rem);
+      max-width: var(--max);
+      margin: 0 auto;
+      padding: 0 clamp(1.2rem, 5vw, 5rem) 10rem;
+    }
+
+    .sidebar {
+      position: sticky;
+      top: 92px;
+      align-self: start;
+      max-height: calc(100dvh - 110px);
+      overflow: auto;
+      scrollbar-width: thin;
+    }
+    .sidebar-label {
+      margin: 0 0 1rem;
+      color: var(--muted);
+      font-family: "IBM Plex Mono", monospace;
+      font-size: .65rem;
+      letter-spacing: .13em;
+      text-transform: uppercase;
+    }
+    .search {
+      width: 100%;
+      margin-bottom: 1.4rem;
+      padding: .75rem .85rem;
+      color: var(--ink);
+      border: 1px solid var(--line);
+      border-radius: 4px;
+      outline: none;
+      background: transparent;
+      font-size: .78rem;
+      transition: border-color .2s ease, background .2s ease;
+    }
+    .search:focus { border-color: var(--accent); background: var(--surface); }
+    .timeline-nav { display: grid; }
+    .timeline-link {
+      position: relative;
+      display: grid;
+      grid-template-columns: 27px 1fr;
+      gap: .8rem;
+      padding: .8rem 0;
+      color: var(--muted);
+      text-decoration: none;
+      border-left: 1px solid var(--line);
+      transition: color .2s ease;
+    }
+    .timeline-link::before {
+      content: "";
+      position: absolute;
+      top: 1.15rem;
+      left: -4px;
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--paper);
+      border: 1px solid var(--line);
+      transition: background .2s ease, transform .2s ease;
+    }
+    .timeline-link:hover, .timeline-link.active { color: var(--ink); }
+    .timeline-link.active::before { background: var(--accent); border-color: var(--accent); transform: scale(1.45); }
+    .nav-index { padding-left: .7rem; font-family: "IBM Plex Mono", monospace; font-size: .65rem; }
+    .nav-text strong { display: block; font-size: .76rem; line-height: 1.35; }
+    .nav-text span { display: block; margin-top: .25rem; font-family: "IBM Plex Mono", monospace; font-size: .6rem; }
+
+    main { min-width: 0; }
+    .chapter {
+      margin-bottom: 9rem;
+      scroll-margin-top: 95px;
+      animation: reveal .75s both;
+      animation-timeline: view();
+      animation-range: entry 5% cover 20%;
+    }
+    @keyframes reveal {
+      from { opacity: .15; transform: translateY(28px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .section-kicker {
+      margin-bottom: .8rem;
+      color: var(--accent);
+      font-family: "IBM Plex Mono", monospace;
+      font-size: .68rem;
+      letter-spacing: .13em;
+      text-transform: uppercase;
+    }
+    .section-title {
+      max-width: 900px;
+      font-family: "Newsreader", serif;
+      font-size: clamp(2.7rem, 6vw, 5.9rem);
+      font-weight: 500;
+      letter-spacing: -.05em;
+    }
+    .section-intro {
+      max-width: 780px;
+      margin: 1.5rem 0 3rem;
+      color: var(--muted);
+      font-size: 1.05rem;
+    }
+
+    .principles {
+      display: grid;
+      grid-template-columns: 1.2fr .8fr;
+      gap: 1px;
+      border: 1px solid var(--line);
+      background: var(--line);
+      box-shadow: var(--shadow);
+    }
+    .principle {
+      padding: clamp(1.5rem, 3vw, 2.8rem);
+      background: var(--surface);
+    }
+    .principle:first-child { grid-row: span 2; }
+    .principle-number {
+      color: var(--accent);
+      font-family: "IBM Plex Mono", monospace;
+      font-size: .68rem;
+    }
+    .principle h3 { margin: 2.6rem 0 .8rem; font-size: 1.1rem; }
+    .principle p { margin: 0; color: var(--muted); font-size: .86rem; }
+
+    .commit {
+      position: relative;
+      padding-top: 1.4rem;
+      border-top: 1px solid var(--line);
+    }
+    .commit-head {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 2rem;
+      align-items: start;
+      margin-bottom: 3rem;
+    }
+    .commit-order {
+      color: var(--accent);
+      font-family: "Newsreader", serif;
+      font-size: 1.1rem;
+      font-style: italic;
+    }
+    .commit h2 {
+      max-width: 850px;
+      margin-top: .7rem;
+      font-family: "Newsreader", serif;
+      font-size: clamp(2.5rem, 5.4vw, 5.4rem);
+      font-weight: 500;
+      letter-spacing: -.05em;
+    }
+    .commit-meta {
+      display: grid;
+      gap: .35rem;
+      min-width: 190px;
+      color: var(--muted);
+      font-family: "IBM Plex Mono", monospace;
+      font-size: .66rem;
+      text-align: right;
+    }
+    .hash {
+      display: inline-block;
+      color: var(--ink);
+      font-weight: 500;
+      letter-spacing: .04em;
+    }
+
+    .thesis {
+      display: grid;
+      grid-template-columns: 9rem minmax(0, 1fr);
+      gap: 2rem;
+      max-width: 900px;
+      margin-bottom: 3.5rem;
+    }
+    .thesis-label {
+      color: var(--accent);
+      font-family: "IBM Plex Mono", monospace;
+      font-size: .67rem;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+    }
+    .thesis p {
+      margin: 0;
+      font-family: "Newsreader", serif;
+      font-size: clamp(1.45rem, 2.5vw, 2.15rem);
+      line-height: 1.35;
+    }
+
+    .commit-grid {
+      display: grid;
+      grid-template-columns: minmax(0, 1.4fr) minmax(250px, .6fr);
+      gap: clamp(2rem, 5vw, 5rem);
+    }
+    .prose h3 {
+      margin: 3.2rem 0 1rem;
+      font-size: .75rem;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+    }
+    .prose h3:first-child { margin-top: 0; }
+    .prose p { max-width: 74ch; margin: 0 0 1.1rem; color: var(--muted); }
+    .prose strong { color: var(--ink); }
+    .prose ul { max-width: 74ch; margin: 0; padding: 0; list-style: none; }
+    .prose li {
+      position: relative;
+      padding: .8rem 0 .8rem 1.6rem;
+      color: var(--muted);
+      border-bottom: 1px solid var(--line-soft);
+    }
+    .prose li::before {
+      content: "";
+      position: absolute;
+      top: 1.38rem;
+      left: 0;
+      width: 7px;
+      height: 7px;
+      border: 1px solid var(--accent);
+      transform: rotate(45deg);
+    }
+
+    .commit-aside { display: grid; align-content: start; gap: 1.4rem; }
+    .stat-strip {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      border-top: 1px solid var(--line);
+      border-bottom: 1px solid var(--line);
+    }
+    .stat { padding: 1.1rem 0; }
+    .stat + .stat { padding-left: 1rem; border-left: 1px solid var(--line); }
+    .stat b {
+      display: block;
+      font-family: "Newsreader", serif;
+      font-size: 2.3rem;
+      line-height: 1;
+    }
+    .stat span { color: var(--muted); font-size: .65rem; text-transform: uppercase; letter-spacing: .08em; }
+
+    .file-list {
+      margin: 0;
+      padding: 0;
+      list-style: none;
+      border-top: 1px solid var(--line);
+    }
+    .file-list li {
+      padding: .72rem 0;
+      border-bottom: 1px solid var(--line);
+      font-family: "IBM Plex Mono", monospace;
+      font-size: .66rem;
+      overflow-wrap: anywhere;
+    }
+    .file-list small { display: block; margin-top: .25rem; color: var(--muted); font-family: "Manrope", sans-serif; }
+
+    .decision {
+      padding: 1.15rem;
+      border-left: 2px solid var(--accent);
+      background: color-mix(in srgb, var(--accent-soft) 45%, transparent);
+    }
+    .decision b {
+      display: block;
+      margin-bottom: .45rem;
+      font-size: .68rem;
+      letter-spacing: .1em;
+      text-transform: uppercase;
+    }
+    .decision p { margin: 0; color: var(--muted); font-size: .78rem; }
+
+    .code-sample {
+      position: relative;
+      margin: 2rem 0;
+      padding: 1.4rem;
+      color: #dedbd2;
+      border-radius: 5px;
+      background: #22241f;
+      overflow-x: auto;
+      box-shadow: var(--shadow);
+    }
+    .code-sample::before {
+      content: attr(data-label);
+      display: block;
+      margin-bottom: .9rem;
+      color: #d68161;
+      font-family: "IBM Plex Mono", monospace;
+      font-size: .6rem;
+      letter-spacing: .1em;
+      text-transform: uppercase;
+    }
+    .code-sample code { font-size: .72rem; line-height: 1.7; white-space: pre; }
+
+    details {
+      margin-top: 2rem;
+      border-top: 1px solid var(--line);
+      border-bottom: 1px solid var(--line);
+    }
+    summary {
+      padding: 1rem 0;
+      cursor: pointer;
+      font-size: .74rem;
+      font-weight: 700;
+      letter-spacing: .09em;
+      text-transform: uppercase;
+    }
+    details .detail-body { padding: 0 0 1.5rem; color: var(--muted); font-size: .84rem; }
+
+    .closing {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1px;
+      background: var(--line);
+      border: 1px solid var(--line);
+      box-shadow: var(--shadow);
+    }
+    .closing > div { padding: clamp(1.5rem, 4vw, 4rem); background: var(--surface); }
+    .closing h3 { margin-bottom: 1rem; font-family: "Newsreader", serif; font-size: 2rem; }
+    .closing p { color: var(--muted); }
+
+    .hidden-by-search { display: none; }
+
+    @media (max-width: 980px) {
+      .hero { grid-template-columns: 1fr; min-height: auto; }
+      .hero-facts { max-width: 520px; }
+      .layout { grid-template-columns: 1fr; }
+      .sidebar { position: static; max-height: none; }
+      .timeline-nav { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 1rem; }
+      .commit-grid { grid-template-columns: 1fr; }
+      .commit-aside { grid-template-columns: 1fr 1fr; }
+    }
+
+    @media (max-width: 700px) {
+      .topbar { padding-inline: 1rem; }
+      .brand span { display: none; }
+      .hero { padding-top: 4rem; }
+      h1 { font-size: clamp(3.5rem, 19vw, 5.5rem); }
+      .timeline-nav, .principles, .closing, .commit-aside { grid-template-columns: 1fr; }
+      .principle:first-child { grid-row: auto; }
+      .commit-head { grid-template-columns: 1fr; }
+      .commit-meta { text-align: left; }
+      .thesis { grid-template-columns: 1fr; gap: .7rem; }
+    }
+
+    @media print {
+      :root { --paper: #fff; --ink: #111; --muted: #444; --line: #bbb; --surface: #fff; }
+      body { background: #fff; }
+      body::before, .topbar, .sidebar, .reading-progress { display: none; }
+      .hero { min-height: auto; padding: 2rem 0 4rem; }
+      .layout { display: block; padding: 0; }
+      .chapter { break-before: page; margin-bottom: 3rem; animation: none; }
+      .commit-grid { grid-template-columns: 1fr; }
+      details { break-inside: avoid; }
+      details > * { display: block; }
+      .code-sample { color: #111; border: 1px solid #bbb; background: #f5f5f5; box-shadow: none; }
+    }
+  </style>
+</head>
+<body>
+  <div class="reading-progress" id="readingProgress"></div>
+
+  <header class="topbar">
+    <div class="brand"><span class="brand-mark" aria-hidden="true"></span><span>Smart City / Registro tecnico</span></div>
+    <div class="toolbar">
+      <button class="icon-button" id="printButton" aria-label="Imprimir documentacion" title="Imprimir">
+        <svg viewBox="0 0 24 24"><path d="M7 8V3h10v5M7 17H5a2 2 0 0 1-2-2v-4a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v4a2 2 0 0 1-2 2h-2M7 14h10v7H7z"/></svg>
+      </button>
+      <button class="icon-button" id="themeButton" aria-label="Cambiar tema" title="Cambiar tema">
+        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.42 1.42M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.42-1.42M17.66 6.34l1.41-1.41"/></svg>
+      </button>
+    </div>
+  </header>
+
+  <section class="hero">
+    <div>
+      <div class="eyebrow">Dossier de implementacion / rama dev/simulacion</div>
+      <h1>De demos fragiles a una <em>simulacion verificable.</em></h1>
+      <p class="hero-lede">Documentacion completa de los siete commits que reconstruyeron la simulacion Smart City. Cada capitulo explica el problema original, la decision tomada, la implementacion concreta y la razon tecnica detras del cambio.</p>
+    </div>
+    <aside class="hero-facts" aria-label="Resumen cuantitativo">
+      <div class="fact"><span class="fact-value">07</span><span class="fact-label">commits de simulacion documentados; se excluyen deliberadamente los commits de la skill.</span></div>
+      <div class="fact"><span class="fact-value">1.353</span><span class="fact-label">lineas agregadas al subsistema de simulacion.</span></div>
+      <div class="fact"><span class="fact-value">699</span><span class="fact-label">lineas de demos anteriores eliminadas o reemplazadas.</span></div>
+      <div class="fact"><span class="fact-value">R1–R21</span><span class="fact-label">matriz de reglas observada, incluyendo brechas conocidas.</span></div>
+    </aside>
+  </section>
+
+  <div class="layout">
+    <aside class="sidebar">
+      <p class="sidebar-label">Navegacion por commit</p>
+      <input class="search" id="commitSearch" type="search" placeholder="Buscar concepto, archivo o regla..." aria-label="Buscar en commits">
+      <nav class="timeline-nav" id="timelineNav">
+        <a class="timeline-link" href="#contexto"><span class="nav-index">00</span><span class="nav-text"><strong>Contexto y criterio</strong><span>antes de los commits</span></span></a>
+        <a class="timeline-link" href="#c80f2232"><span class="nav-index">01</span><span class="nav-text"><strong>Harness transaccional</strong><span>80f2232</span></span></a>
+        <a class="timeline-link" href="#c58fec2a"><span class="nav-index">02</span><span class="nav-text"><strong>Escenarios Smart City</strong><span>58fec2a</span></span></a>
+        <a class="timeline-link" href="#c13e43dd"><span class="nav-index">03</span><span class="nav-text"><strong>Rafaga de 20</strong><span>13e43dd</span></span></a>
+        <a class="timeline-link" href="#c613322e"><span class="nav-index">04</span><span class="nav-text"><strong>Reporte operativo</strong><span>613322e</span></span></a>
+        <a class="timeline-link" href="#c64dad1f"><span class="nav-index">05</span><span class="nav-text"><strong>Tipo y zona</strong><span>64dad1f</span></span></a>
+        <a class="timeline-link" href="#c019c43c"><span class="nav-index">06</span><span class="nav-text"><strong>Guia y auditoria</strong><span>019c43c</span></span></a>
+        <a class="timeline-link" href="#c38ec8d6"><span class="nav-index">07</span><span class="nav-text"><strong>Restaurar secuencias</strong><span>38ec8d6</span></span></a>
+        <a class="timeline-link" href="#resultado"><span class="nav-index">08</span><span class="nav-text"><strong>Resultado conjunto</strong><span>arquitectura final</span></span></a>
+      </nav>
+    </aside>
+
+    <main>
+      <section class="chapter" id="contexto" data-search="contexto problema demos destructivas ids magicos filosofia">
+        <div class="section-kicker">Punto de partida</div>
+        <h2 class="section-title">El problema no era la cantidad de SQL. Era la calidad de la evidencia.</h2>
+        <p class="section-intro">La carpeta original tenia ocho demostraciones independientes. Mostraban consultas antes y despues, pero no podian decidir de forma automatica si el motor cumplia la consigna. Ademas, borraban estado global, dependian de IDs fijos y afirmaban comportamientos que la migracion canonica no instalaba.</p>
+        <div class="principles">
+          <article class="principle">
+            <span class="principle-number">01 / evidencia</span>
+            <h3>Observar no es verificar</h3>
+            <p>Un listado de filas obliga a una persona a interpretar manualmente el resultado. La nueva suite convierte cada expectativa en una asercion registrada con estado y detalle. Eso permite distinguir un comportamiento correcto, una regresion y una brecha conocida.</p>
+          </article>
+          <article class="principle">
+            <span class="principle-number">02 / honestidad</span>
+            <h3>No simular una capacidad que no existe</h3>
+            <p>Las reglas ausentes no se implementan dentro de la demo. Se demuestran como <span class="mono">XFAIL</span>, preservando la diferencia entre el motor y la evidencia.</p>
+          </article>
+          <article class="principle">
+            <span class="principle-number">03 / seguridad</span>
+            <h3>La corrida debe dejar la base como estaba</h3>
+            <p>La simulacion pasa a ser transaccional, restaura estado entre escenarios y finalmente revierte toda la ejecucion.</p>
+          </article>
+        </div>
+      </section>
+
+      <article class="chapter commit" id="c80f2232" data-search="80f2232 harness transaccional rollback tablas temporales pass fail xfail xpass skip info runner">
+        <header class="commit-head">
+          <div><span class="commit-order">Commit 01</span><h2>Construir el lenguaje de la evidencia.</h2></div>
+          <div class="commit-meta"><span class="hash">80f2232</span><span>04/06/2026 · 15:11</span><span>feat(simulation)</span></div>
+        </header>
+        <div class="thesis"><span class="thesis-label">Tesis</span><p>Antes de escribir mejores escenarios era necesario crear una infraestructura capaz de medirlos, aislarlos y comunicar sus resultados sin destruir la base.</p></div>
+        <div class="commit-grid">
+          <div class="prose">
+            <h3>Que se implemento</h3>
+            <p>Se agrego el runner <strong>00_run_all.sql</strong> y el nucleo reutilizable <strong>lib/harness.sql</strong>. El runner abre una unica transaccion, inicializa el harness, calcula si existen fallos inesperados, ejecuta <span class="mono">ROLLBACK</span> y solo entonces decide el codigo de salida de <span class="mono">psql</span>.</p>
+            <p>El harness crea tres registros temporales: resultados de aserciones, metricas numericas y cobertura de reglas/procedimientos. Todo vive en la sesion mediante <span class="mono">pg_temp</span> y tablas <span class="mono">ON COMMIT DROP</span>.</p>
+            <h3>Por que se hizo asi</h3>
+            <ul>
+              <li><strong>Una transaccion global</strong> garantiza que los escenarios puedan modificar datos reales y activar triggers reales, pero sin persistir esas modificaciones.</li>
+              <li><strong>No usar excepciones como asercion normal</strong> evita que un primer fallo aborte la transaccion y borre la evidencia del resto de la corrida.</li>
+              <li><strong>Separar PASS, FAIL, XFAIL, XPASS, SKIP e INFO</strong> permite expresar la diferencia entre una regresion, una ausencia conocida y una dependencia no disponible.</li>
+              <li><strong>Resolver catalogos por nombre</strong> elimina la dependencia de IDs magicos y hace que las pruebas describan intencion de negocio.</li>
+              <li><strong>Snapshots de parametros, recursos y permisos de zona</strong> permiten restaurar el entorno entre escenarios, no solo al final.</li>
+            </ul>
+            <pre class="code-sample" data-label="Contrato central"><code>BEGIN;
+\ir lib/harness.sql
+...
+SELECT (count(*) FILTER (WHERE estado = 'FAIL') &gt; 0)::int
+FROM sim_resultado \gset
+ROLLBACK;</code></pre>
+            <details><summary>Funciones principales incorporadas</summary><div class="detail-body"><span class="mono">sim_registrar</span> guarda cualquier resultado; <span class="mono">sim_afirmar</span> convierte una condicion booleana en PASS/FAIL; <span class="mono">sim_brecha</span> modela XFAIL/XPASS; <span class="mono">sim_medir</span> registra KPI; <span class="mono">sim_objeto_existe</span>, <span class="mono">sim_trigger_existe</span> y <span class="mono">sim_relacion_existe</span> inspeccionan capacidades; <span class="mono">sim_reset_operativo</span> limpia y restaura el entorno; <span class="mono">sim_capturar_error</span> transforma excepciones inesperadas en evidencia visible.</div></details>
+          </div>
+          <aside class="commit-aside">
+            <div class="stat-strip"><div class="stat"><b>301</b><span>lineas agregadas</span></div><div class="stat"><b>02</b><span>archivos nuevos</span></div></div>
+            <ul class="file-list"><li>simulacion/00_run_all.sql<small>Orquestador y contrato de salida.</small></li><li>simulacion/lib/harness.sql<small>Infraestructura reutilizable de la suite.</small></li></ul>
+            <div class="decision"><b>Decision clave</b><p>El harness no corrige el motor. Solo lo observa, lo ejercita y registra evidencia.</p></div>
+          </aside>
+        </div>
+      </article>
+
+      <article class="chapter commit" id="c58fec2a" data-search="58fec2a escenarios preflight asignacion inteligencia ciclo vida validaciones sensores iot saturacion rebalanceo brechas">
+        <header class="commit-head">
+          <div><span class="commit-order">Commit 02</span><h2>Reemplazar demos por escenarios que pueden fallar.</h2></div>
+          <div class="commit-meta"><span class="hash">58fec2a</span><span>04/06/2026 · 15:15</span><span>feat(simulation)</span></div>
+        </header>
+        <div class="thesis"><span class="thesis-label">Tesis</span><p>Una simulacion profesional debe expresar precondiciones, accion, expectativa y evidencia; no limitarse a imprimir filas y esperar que alguien adivine si estan bien.</p></div>
+        <div class="commit-grid">
+          <div class="prose">
+            <h3>Transformacion estructural</h3>
+            <p>Se eliminaron siete demos manuales y el archivo que indicaba ejecutarlas una por una. En su lugar, el runner paso a incluir siete escenarios autocontenidos. El resultado fue una unica narrativa ejecutable: inspeccionar capacidades, probar comportamiento, tensionar el sistema y exponer brechas.</p>
+            <h3>Detalle por escenario</h3>
+            <ul>
+              <li><strong>01_preflight.sql:</strong> verifica dataset, vistas minimas y objetos realmente instalados. La decision importante es separar “archivo existente” de “objeto cargado en PostgreSQL”.</li>
+              <li><strong>02_asignacion_inteligencia.sql:</strong> prueba R1/R2/R5/R8/R12/R13/R14 y compatibilidad. Aumenta deliberadamente el puntaje de un recurso para demostrar que la seleccion inteligente lo prioriza.</li>
+              <li><strong>03_ciclo_vida.sql:</strong> ejecuta dos historias completas. Una intervencion exitosa debe resolver el incidente y liberar el recurso; una falla debe penalizar, cerrar la asignacion y generar reemplazo.</li>
+              <li><strong>04_validaciones.sql:</strong> intenta acciones prohibidas y considera PASS que PostgreSQL las rechace. Captura excepciones esperadas sin abortar la suite.</li>
+              <li><strong>05_sensores_iot.sql:</strong> cubre sensor confiable, sensor poco confiable, mapeo ambiguo y duplicado IoT. Usa SKIP cuando el dataset no permite una precondicion valida.</li>
+              <li><strong>06_saturacion_rebalanceo.sql:</strong> agota recursos locales compatibles, observa el rebalanceo global y fuerza capacidad cero mediante un parametro temporal.</li>
+              <li><strong>07_brechas_conocidas.sql:</strong> convierte faltantes reales en XFAIL. Demuestra, entre otros puntos, que la demora no penaliza automaticamente y que superar el umbral no bloquea recursos.</li>
+            </ul>
+            <h3>Por que se eliminaron las demos anteriores</h3>
+            <p>Las demos viejas borraban tablas operativas, forzaban estados usando IDs numericos y mezclaban expectativas incorrectas. Un ejemplo claro era esperar <span class="mono">En transito</span> aunque el motor modular asigna directamente <span class="mono">Ocupado</span>. Mantener ambos conjuntos habria dejado dos verdades incompatibles.</p>
+            <details><summary>Criterio de manejo de errores</summary><div class="detail-body">Cada escenario completo tiene un bloque <span class="mono">EXCEPTION WHEN OTHERS</span> que registra un FAIL inesperado. Dentro de las pruebas negativas, las excepciones esperadas se capturan en sub-bloques y se transforman en PASS. Esa distincion evita falsos negativos y evita tambien que un error real desaparezca entre mensajes de consola.</div></details>
+          </div>
+          <aside class="commit-aside">
+            <div class="stat-strip"><div class="stat"><b>514</b><span>lineas agregadas</span></div><div class="stat"><b>573</b><span>lineas retiradas</span></div></div>
+            <ul class="file-list"><li>01_preflight.sql<small>Capacidades reales.</small></li><li>02_asignacion_inteligencia.sql<small>Reglas activas e inteligencia.</small></li><li>03_ciclo_vida.sql<small>Exito y falla.</small></li><li>04_validaciones.sql<small>Acciones prohibidas.</small></li><li>05_sensores_iot.sql<small>Promocion y confianza.</small></li><li>06_saturacion_rebalanceo.sql<small>Capacidad y geografia.</small></li><li>07_brechas_conocidas.sql<small>Ausencias demostradas.</small></li></ul>
+            <div class="decision"><b>Decision clave</b><p>Una brecha conocida no rompe la corrida, pero tampoco se oculta: queda visible como XFAIL.</p></div>
+          </aside>
+        </div>
+      </article>
+
+      <article class="chapter commit" id="c13e43dd" data-search="13e43dd veinte incidentes rafaga deterministica simultaneidad fallas metricas compatibilidad">
+        <header class="commit-head">
+          <div><span class="commit-order">Commit 03</span><h2>Convertir los veinte incidentes en una carga de trabajo reproducible.</h2></div>
+          <div class="commit-meta"><span class="hash">13e43dd</span><span>04/06/2026 · 15:16</span><span>feat(simulation)</span></div>
+        </header>
+        <div class="thesis"><span class="thesis-label">Tesis</span><p>La simulacion obligatoria necesitaba ser mas que un INSERT masivo: debia producir una historia operativa medible, repetible y honesta sobre su alcance.</p></div>
+        <div class="commit-grid">
+          <div class="prose">
+            <h3>Que cambio</h3>
+            <p>El antiguo script usaba IDs aritmeticos, alteraba un parametro que ni siquiera era cargado por la migracion canonica y luego imprimia resumentes. El nuevo escenario genera veinte pares tipo/zona unicos desde los catalogos reales, rota las cinco gravedades y registra cada incidente en <span class="mono">sim_lote_20</span>.</p>
+            <h3>Flujo de la carga</h3>
+            <ul>
+              <li>Una sola sentencia <span class="mono">INSERT ... SELECT</span> crea exactamente veinte incidentes, cumpliendo la exigencia de una rafaga.</li>
+              <li>Las combinaciones tipo/zona son unicas para no activar R11 accidentalmente y confundir duplicacion con capacidad.</li>
+              <li>Se inducen fallas deterministicas en los incidentes 7 y 14 para permitir que el motor ejecute penalizacion y reasignacion.</li>
+              <li>Las asignaciones restantes reciben tiempos de llegada y finalizacion reproducibles, permitiendo medir resolucion y SLA.</li>
+              <li>Se verifican cantidad, unicidad, compatibilidad y capacidad real de reaccion ante fallas.</li>
+              <li>Se registran KPI: incidentes creados, asignaciones iniciales, fallas, resueltos, pendientes y decisiones de rebalanceo.</li>
+            </ul>
+            <pre class="code-sample" data-label="Rafaga deterministica"><code>WITH combinaciones AS (
+  SELECT row_number() OVER (...) AS numero,
+         ti.id_tipo_incidente, z.id_zona,
+         ((row_number() OVER (...) - 1) % 5 + 1) AS id_gravedad
+  FROM TipoIncidente ti CROSS JOIN Zona z
+  LIMIT 20
+)
+INSERT INTO Incidente (...) SELECT ... FROM combinaciones;</code></pre>
+            <h3>Limite declarado</h3>
+            <p>El commit explicita que esto representa <strong>simultaneidad logica</strong>: una sentencia con veinte filas que activa triggers fila a fila. No afirma probar concurrencia real entre dos conexiones. Esa precision evita vender una prueba que el escenario no realiza.</p>
+          </div>
+          <aside class="commit-aside">
+            <div class="stat-strip"><div class="stat"><b>20</b><span>incidentes exactos</span></div><div class="stat"><b>06</b><span>metricas del lote</span></div></div>
+            <ul class="file-list"><li>08_simulacion_20_incidentes.sql<small>Reescritura integral del caso obligatorio.</small></li><li>00_run_all.sql<small>Incorpora el lote al flujo oficial.</small></li></ul>
+            <div class="decision"><b>Decision clave</b><p>Determinismo primero: la misma base debe producir una carga comparable entre corridas.</p></div>
+          </aside>
+        </div>
+      </article>
+
+      <article class="chapter commit" id="c613322e" data-search="613322e reporte operativo cobertura reglas procedimientos sla ranking auditoria veredicto">
+        <header class="commit-head">
+          <div><span class="commit-order">Commit 04</span><h2>Transformar evidencia dispersa en un veredicto defendible.</h2></div>
+          <div class="commit-meta"><span class="hash">613322e</span><span>04/06/2026 · 15:17</span><span>feat(simulation)</span></div>
+        </header>
+        <div class="thesis"><span class="thesis-label">Tesis</span><p>Una suite puede ser tecnicamente buena y aun asi resultar dificil de defender. El reporte convierte sus registros internos en una lectura ordenada para docentes, equipo y depuracion.</p></div>
+        <div class="commit-grid">
+          <div class="prose">
+            <h3>Capas del reporte</h3>
+            <ul>
+              <li><strong>Veredicto general:</strong> distingue FAIL, PASS CON BRECHAS CONOCIDAS y PASS COMPLETO.</li>
+              <li><strong>Resumen de aserciones:</strong> cuenta cada estado de resultado y prioriza visualmente fallos y brechas.</li>
+              <li><strong>Matriz R1–R21 / P1–P5:</strong> cruza objetos instalados con evidencia funcional, evitando confundir presencia con funcionamiento.</li>
+              <li><strong>Metricas:</strong> presenta los KPI generados por escenarios, especialmente el lote de veinte.</li>
+              <li><strong>Analisis operativo:</strong> estados finales, gravedad, riesgo, SLA, recursos utilizados y ranking por desempeno.</li>
+              <li><strong>Auditoria:</strong> resume triggers y operaciones registradas en Log.</li>
+              <li><strong>Brechas:</strong> lista FAIL, XFAIL, XPASS y SKIP con detalle concreto.</li>
+              <li><strong>Nota de concurrencia:</strong> declara que existen locks en validaciones pero no una prueba multisesion.</li>
+            </ul>
+            <h3>Por que existe un mapa entre regla y asercion</h3>
+            <p>La tabla temporal <span class="mono">sim_mapa_cobertura</span> enlaza reglas de negocio con nombres de pruebas funcionales. De esa forma, una regla no se marca PASS solo porque su trigger exista: necesita evidencia producida durante la corrida. P1 y R19 reciben tratamiento especifico porque su evidencia se obtiene por disponibilidad o historial.</p>
+            <h3>Orden de lectura pensado para la defensa</h3>
+            <p>Primero se responde “¿salio bien?”, despues “¿que reglas cubre?”, luego “¿que ocurrio durante la operacion?” y finalmente “¿que falta?”. El reporte no es un volcado de tablas; es una narrativa de evaluacion.</p>
+          </div>
+          <aside class="commit-aside">
+            <div class="stat-strip"><div class="stat"><b>181</b><span>lineas agregadas</span></div><div class="stat"><b>09</b><span>bloques de lectura</span></div></div>
+            <ul class="file-list"><li>09_reporte_operativo.sql<small>Reporte ejecutivo y tecnico.</small></li><li>00_run_all.sql<small>Imprime el reporte antes de decidir salida.</small></li></ul>
+            <div class="decision"><b>Decision clave</b><p>El reporte se imprime antes del rollback y antes del codigo de salida para no perder evidencia ante fallos.</p></div>
+          </aside>
+        </div>
+      </article>
+
+      <article class="chapter commit" id="c64dad1f" data-search="64dad1f validacion tipo incompatible zona r10 recurso fuera zona cobertura">
+        <header class="commit-head">
+          <div><span class="commit-order">Commit 05</span><h2>Cerrar dos huecos de integridad que una demo facil podia esquivar.</h2></div>
+          <div class="commit-meta"><span class="hash">64dad1f</span><span>04/06/2026 · 15:18</span><span>test(simulation)</span></div>
+        </header>
+        <div class="thesis"><span class="thesis-label">Tesis</span><p>No alcanza con probar que un recurso esta disponible. Tambien debe pertenecer a un tipo aplicable y estar habilitado geograficamente para el incidente.</p></div>
+        <div class="commit-grid">
+          <div class="prose">
+            <h3>Nuevas pruebas negativas</h3>
+            <p>El escenario de validaciones ya cubria doble asignacion, recurso fuera de servicio, transicion invalida y duplicados. Este commit agrego dos intentos cuidadosamente construidos:</p>
+            <ul>
+              <li><strong>Tipo incompatible:</strong> busca dinamicamente un recurso disponible cuyo tipo no aparezca en <span class="mono">TipoIncidenteTipoRecurso</span> para el incidente. La prueba pasa si la insercion de Asignacion es rechazada.</li>
+              <li><strong>Fuera de zona:</strong> busca un recurso compatible y disponible, pero sin entrada en <span class="mono">ZonaRecurso</span> para la zona del incidente. La prueba pasa si R10 bloquea la asignacion.</li>
+            </ul>
+            <h3>Por que usar SKIP en ausencia de candidato</h3>
+            <p>Los candidatos se derivan del dataset. Si el dataset no contiene un caso apropiado, marcar FAIL seria incorrecto: no se demostro un defecto, simplemente no existio una precondicion. Por eso el escenario registra SKIP y explica la causa.</p>
+            <h3>Integracion con cobertura</h3>
+            <p>El reporte incorpora el patron <span class="mono">R10 zona habilitada</span>. Desde este commit, R10 puede figurar PASS por comportamiento observado, no solo por trigger instalado.</p>
+          </div>
+          <aside class="commit-aside">
+            <div class="stat-strip"><div class="stat"><b>49</b><span>lineas agregadas</span></div><div class="stat"><b>02</b><span>casos nuevos</span></div></div>
+            <ul class="file-list"><li>04_validaciones.sql<small>Dos pruebas negativas nuevas.</small></li><li>09_reporte_operativo.sql<small>R10 conectado a evidencia.</small></li></ul>
+            <div class="decision"><b>Decision clave</b><p>Las pruebas buscan candidatos por propiedades de negocio, no por IDs elegidos manualmente.</p></div>
+          </aside>
+        </div>
+      </article>
+
+      <article class="chapter commit" id="c019c43c" data-search="019c43c documentacion readme ejecucion auditoria arquitectura estados pass fail xfail">
+        <header class="commit-head">
+          <div><span class="commit-order">Commit 06</span><h2>Documentar no solo como correrla, sino como pensarla.</h2></div>
+          <div class="commit-meta"><span class="hash">019c43c</span><span>04/06/2026 · 15:19</span><span>docs(simulation)</span></div>
+        </header>
+        <div class="thesis"><span class="thesis-label">Tesis</span><p>Una suite que solo entiende su autor se degrada rapidamente. La documentacion convierte decisiones implicitas en un contrato compartido.</p></div>
+        <div class="commit-grid">
+          <div class="prose">
+            <h3>Contenido incorporado</h3>
+            <ul>
+              <li>Objetivo de la suite y diferencia precisa entre PASS, FAIL, XFAIL, XPASS, SKIP e INFO.</li>
+              <li>Comando oficial de ejecucion con <span class="mono">psql</span> y requisitos previos.</li>
+              <li>Explicacion del aislamiento transaccional y advertencia sobre locks durante la corrida.</li>
+              <li>Diagrama textual del flujo Sensor → Evento → Incidente → Asignacion → Resolucion.</li>
+              <li>Mapa de cada archivo numerado y la demostracion que contiene.</li>
+              <li>Auditoria del repositorio: IDs magicos, expectativas incorrectas, objetos no cargados y procedimientos ausentes.</li>
+              <li>Estado esperado de cobertura y guia de lectura para una defensa oral.</li>
+            </ul>
+            <h3>Por que la auditoria forma parte de la documentacion</h3>
+            <p>El objetivo no era presentar una imagen artificial de cumplimiento total. La guia explica que R16, R17, R20 y P2 tienen codigo fuente pero no son instalados por la migracion; que R6 y P3–P5 no existen; y que demora/bloqueo no funcionan en los modulos cargados. Esto permite interpretar correctamente los XFAIL.</p>
+            <h3>Valor para el equipo</h3>
+            <p>La documentacion establece una unica interfaz oficial: ejecutar <span class="mono">00_run_all.sql</span> y leer el reporte en un orden concreto. Reduce conocimiento tribal y evita volver a las demos retiradas.</p>
+          </div>
+          <aside class="commit-aside">
+            <div class="stat-strip"><div class="stat"><b>126</b><span>lineas documentadas</span></div><div class="stat"><b>01</b><span>guia canonica</span></div></div>
+            <ul class="file-list"><li>simulacion/README.md<small>Operacion, arquitectura y auditoria.</small></li></ul>
+            <div class="decision"><b>Decision clave</b><p>Documentar tambien lo que falta evita que XFAIL se confunda con un error de la suite.</p></div>
+          </aside>
+        </div>
+      </article>
+
+      <article class="chapter commit" id="c38ec8d6" data-search="38ec8d6 secuencias rollback postgres setval no transaccional restaurar">
+        <header class="commit-head">
+          <div><span class="commit-order">Commit 07</span><h2>Corregir la ultima huella invisible: las secuencias.</h2></div>
+          <div class="commit-meta"><span class="hash">38ec8d6</span><span>04/06/2026 · 15:21</span><span>fix(simulation)</span></div>
+        </header>
+        <div class="thesis"><span class="thesis-label">Tesis</span><p>Un ROLLBACK elimina filas y actualizaciones, pero PostgreSQL no revierte los avances de secuencias. Sin este fix, la suite era casi no destructiva, no completamente no destructiva.</p></div>
+        <div class="commit-grid">
+          <div class="prose">
+            <h3>El problema tecnico</h3>
+            <p>Cuando una insercion consume un valor de <span class="mono">SERIAL</span> o <span class="mono">BIGSERIAL</span>, la secuencia avanza fuera de la semantica transaccional normal. Aunque la fila se revierta, el proximo ID queda incrementado. La simulacion podia dejar huecos en Incidente, Evento, Asignacion, Penalizacion y Log.</p>
+            <h3>Solucion incorporada</h3>
+            <ul>
+              <li>Se crea <span class="mono">sim_secuencias_base</span> para guardar nombre, ultimo valor e indicador <span class="mono">is_called</span>.</li>
+              <li>El snapshot descubre cada secuencia mediante <span class="mono">pg_get_serial_sequence</span>, evitando codificar nombres fisicos.</li>
+              <li>La funcion <span class="mono">sim_restaurar_secuencias</span> ejecuta <span class="mono">setval</span> con el valor y estado originales.</li>
+              <li>El runner llama esa funcion despues del reporte y antes de calcular el resultado/rollback.</li>
+              <li>El README se corrige para explicar la excepcion transaccional de PostgreSQL.</li>
+            </ul>
+            <pre class="code-sample" data-label="Restauracion explicita"><code>FOR v_secuencia IN
+  SELECT * FROM sim_secuencias_base ORDER BY secuencia
+LOOP
+  PERFORM setval(
+    v_secuencia.secuencia::regclass,
+    v_secuencia.ultimo_valor,
+    v_secuencia.fue_usada
+  );
+END LOOP;</code></pre>
+            <h3>Por que es un commit separado</h3>
+            <p>Es una correccion de una garantia transversal, no una feature de negocio. Separarla hace visible una sutileza de PostgreSQL y permite revisar claramente el cambio de contrato: la suite ya no deja ni filas ni avance de identificadores.</p>
+          </div>
+          <aside class="commit-aside">
+            <div class="stat-strip"><div class="stat"><b>05</b><span>secuencias protegidas</span></div><div class="stat"><b>51</b><span>lineas del fix</span></div></div>
+            <ul class="file-list"><li>lib/harness.sql<small>Snapshot y restauracion.</small></li><li>00_run_all.sql<small>Llamada antes del rollback.</small></li><li>README.md<small>Contrato documentado.</small></li></ul>
+            <div class="decision"><b>Decision clave</b><p>“No destructiva” incluye efectos laterales que no son filas visibles.</p></div>
+          </aside>
+        </div>
+      </article>
+
+      <section class="chapter" id="resultado" data-search="resultado arquitectura final commits relacion ejecucion defensa">
+        <div class="section-kicker">Resultado conjunto</div>
+        <h2 class="section-title">Siete commits, una arquitectura coherente.</h2>
+        <p class="section-intro">Los commits no son piezas aisladas. Forman una progresion deliberada: primero se crea el lenguaje de prueba, despues se escriben escenarios, luego se agrega carga, reporte, cobertura faltante, documentacion y finalmente se corrige una sutileza de aislamiento.</p>
+        <div class="closing">
+          <div>
+            <h3>Cadena de responsabilidades</h3>
+            <p><span class="mono">00_run_all.sql</span> orquesta. <span class="mono">lib/harness.sql</span> aisla y registra. Los escenarios 01–08 producen evidencia. <span class="mono">09_reporte_operativo.sql</span> la interpreta. <span class="mono">README.md</span> explica como ejecutar y defender el resultado.</p>
+          </div>
+          <div>
+            <h3>Garantia final</h3>
+            <p>La simulacion no afirma cumplimiento total. Verifica lo implementado, expone lo ausente, devuelve error solo ante regresiones inesperadas y restaura tanto datos como secuencias. Esa honestidad tecnica es la mejora central de toda la rama.</p>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <script>
+    const root = document.documentElement;
+    const progress = document.getElementById('readingProgress');
+    const themeButton = document.getElementById('themeButton');
+    const printButton = document.getElementById('printButton');
+    const search = document.getElementById('commitSearch');
+    const chapters = [...document.querySelectorAll('.chapter')];
+    const links = [...document.querySelectorAll('.timeline-link')];
+
+    const savedTheme = localStorage.getItem('sim-doc-theme');
+    if (savedTheme) root.dataset.theme = savedTheme;
+
+    themeButton.addEventListener('click', () => {
+      const next = root.dataset.theme === 'dark' ? 'light' : 'dark';
+      root.dataset.theme = next;
+      localStorage.setItem('sim-doc-theme', next);
+    });
+    printButton.addEventListener('click', () => window.print());
+
+    const updateProgress = () => {
+      const max = document.documentElement.scrollHeight - window.innerHeight;
+      progress.style.width = `${max > 0 ? (window.scrollY / max) * 100 : 0}%`;
+    };
+    document.addEventListener('scroll', updateProgress, { passive: true });
+    updateProgress();
+
+    const observer = new IntersectionObserver(entries => {
+      entries.forEach(entry => {
+        if (!entry.isIntersecting) return;
+        links.forEach(link => link.classList.toggle('active', link.getAttribute('href') === `#${entry.target.id}`));
+      });
+    }, { rootMargin: '-15% 0px -70% 0px' });
+    chapters.forEach(chapter => observer.observe(chapter));
+
+    search.addEventListener('input', event => {
+      const query = event.target.value.trim().toLowerCase();
+      chapters.forEach(chapter => {
+        const haystack = `${chapter.dataset.search || ''} ${chapter.textContent}`.toLowerCase();
+        chapter.classList.toggle('hidden-by-search', query && !haystack.includes(query));
+      });
+      links.forEach(link => {
+        const target = document.querySelector(link.getAttribute('href'));
+        link.style.display = target?.classList.contains('hidden-by-search') ? 'none' : '';
+      });
+    });
+  </script>
+</body>
+</html>
