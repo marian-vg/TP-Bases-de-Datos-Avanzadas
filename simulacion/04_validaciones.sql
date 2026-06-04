@@ -13,6 +13,8 @@ DECLARE
     v_incidente INT;
     v_recurso INT;
     v_otro INT;
+    v_incompatible INT;
+    v_fuera_zona INT;
     v_bloqueado BOOLEAN;
 BEGIN
     SELECT zr.id_zona INTO v_zona FROM ZonaRecurso zr JOIN Recurso r ON r.id_recurso = zr.id_recurso
@@ -45,6 +47,52 @@ BEGIN
     END;
     PERFORM pg_temp.sim_afirmar('04-VALIDACIONES', 'R8 fuera de servicio', v_bloqueado,
         'El recurso fuera de servicio fue rechazado.', 'Se asigno un recurso fuera de servicio.');
+
+    SELECT r.id_recurso INTO v_incompatible
+    FROM Recurso r
+    JOIN EstadoRecurso er ON er.id_estado_recurso = r.fk_estado_recurso_id
+    WHERE er.nombre = 'Disponible'
+      AND NOT EXISTS (
+          SELECT 1 FROM TipoIncidenteTipoRecurso x
+          WHERE x.fk_tipo_incidente_id = v_tipo
+            AND x.fk_tipo_recurso_id = r.fk_tipo_recurso_id
+      )
+    ORDER BY r.id_recurso LIMIT 1;
+    IF v_incompatible IS NULL THEN
+        PERFORM pg_temp.sim_registrar('04-VALIDACIONES', 'Tipo de recurso incompatible', 'SKIP', 'No se encontro candidato incompatible disponible.');
+    ELSE
+        v_bloqueado := FALSE;
+        BEGIN
+            INSERT INTO Asignacion (fk_recurso_id, fk_incidente_id) VALUES (v_incompatible, v_incidente);
+        EXCEPTION WHEN OTHERS THEN v_bloqueado := TRUE;
+        END;
+        PERFORM pg_temp.sim_afirmar('04-VALIDACIONES', 'Tipo de recurso incompatible', v_bloqueado,
+            'El recurso incompatible fue rechazado.', 'Se asigno un recurso incompatible.');
+    END IF;
+
+    SELECT r.id_recurso INTO v_fuera_zona
+    FROM Recurso r
+    JOIN EstadoRecurso er ON er.id_estado_recurso = r.fk_estado_recurso_id
+    JOIN TipoIncidenteTipoRecurso x
+      ON x.fk_tipo_recurso_id = r.fk_tipo_recurso_id
+     AND x.fk_tipo_incidente_id = v_tipo
+    WHERE er.nombre = 'Disponible'
+      AND NOT EXISTS (
+          SELECT 1 FROM ZonaRecurso zr
+          WHERE zr.id_recurso = r.id_recurso AND zr.id_zona = v_zona
+      )
+    ORDER BY r.id_recurso LIMIT 1;
+    IF v_fuera_zona IS NULL THEN
+        PERFORM pg_temp.sim_registrar('04-VALIDACIONES', 'R10 zona habilitada', 'SKIP', 'No se encontro candidato compatible fuera de zona.');
+    ELSE
+        v_bloqueado := FALSE;
+        BEGIN
+            INSERT INTO Asignacion (fk_recurso_id, fk_incidente_id) VALUES (v_fuera_zona, v_incidente);
+        EXCEPTION WHEN OTHERS THEN v_bloqueado := TRUE;
+        END;
+        PERFORM pg_temp.sim_afirmar('04-VALIDACIONES', 'R10 zona habilitada', v_bloqueado,
+            'El recurso fuera de zona fue rechazado.', 'Se asigno un recurso fuera de su zona habilitada.');
+    END IF;
 
     UPDATE ParametrosSistema SET numero = 0 WHERE nombre_parametro = 'UMBRAL_RECURSOS_ACTIVOS';
     INSERT INTO Incidente (fk_tipo_incidente_id, fk_gravedad_id, fk_estado_incidente_id, fk_zona_id, descripcion, prioridad)

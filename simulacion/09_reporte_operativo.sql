@@ -15,6 +15,7 @@ VALUES
     ('R7',  'R7 cierre automatico'),
     ('R8',  'R8 recursos Ocupado'),
     ('R9',  'R9 transicion invalida'),
+    ('R10', 'R10 zona habilitada'),
     ('R11', 'R11 duplicados'),
     ('R12', 'R12/R13 prioridad'),
     ('R13', 'R12/R13 prioridad'),
