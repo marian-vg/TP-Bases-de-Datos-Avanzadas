@@ -47,6 +47,12 @@ CREATE TEMP TABLE sim_conteos_base (
     cantidad BIGINT NOT NULL
 ) ON COMMIT DROP;
 
+CREATE TEMP TABLE sim_secuencias_base (
+    secuencia TEXT PRIMARY KEY,
+    ultimo_valor BIGINT NOT NULL,
+    fue_usada BOOLEAN NOT NULL
+) ON COMMIT DROP;
+
 INSERT INTO sim_conteos_base (tabla, cantidad)
 VALUES
     ('Incidente',    (SELECT count(*) FROM Incidente)),
@@ -55,6 +61,33 @@ VALUES
     ('Penalizacion', (SELECT count(*) FROM Penalizacion)),
     ('Log',          (SELECT count(*) FROM Log)),
     ('ZonaRecurso',  (SELECT count(*) FROM ZonaRecurso));
+
+DO $$
+DECLARE
+    v_tabla TEXT;
+    v_columna TEXT;
+    v_secuencia TEXT;
+    v_ultimo BIGINT;
+    v_usada BOOLEAN;
+BEGIN
+    FOR v_tabla, v_columna IN
+        VALUES
+            ('Incidente', 'id_incidente'),
+            ('Evento', 'id_evento'),
+            ('Asignacion', 'id_asignacion'),
+            ('Penalizacion', 'id_penalizacion'),
+            ('Log', 'id_log')
+    LOOP
+        SELECT pg_get_serial_sequence(v_tabla, v_columna) INTO v_secuencia;
+        IF v_secuencia IS NOT NULL THEN
+            EXECUTE format('SELECT last_value, is_called FROM %s', v_secuencia::regclass)
+            INTO v_ultimo, v_usada;
+            INSERT INTO sim_secuencias_base (secuencia, ultimo_valor, fue_usada)
+            VALUES (v_secuencia, v_ultimo, v_usada);
+        END IF;
+    END LOOP;
+END;
+$$;
 
 CREATE OR REPLACE FUNCTION pg_temp.sim_registrar(
     p_escenario TEXT,
@@ -235,6 +268,18 @@ BEGIN
         'FAIL',
         'Excepcion inesperada: ' || COALESCE(p_error, 'sin detalle')
     );
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE OR REPLACE FUNCTION pg_temp.sim_restaurar_secuencias()
+RETURNS VOID AS $$
+DECLARE
+    v_secuencia RECORD;
+BEGIN
+    FOR v_secuencia IN SELECT * FROM sim_secuencias_base ORDER BY secuencia
+    LOOP
+        PERFORM setval(v_secuencia.secuencia::regclass, v_secuencia.ultimo_valor, v_secuencia.fue_usada);
+    END LOOP;
 END;
 $$ LANGUAGE plpgsql;
 

@@ -35,7 +35,9 @@ psql -v ON_ERROR_STOP=1 -h localhost -p 5433 -U postgres -d smart_city -f simula
 
 El runner abre una transaccion, toma snapshots temporales, ejecuta todos los escenarios,
 imprime el reporte y termina con `ROLLBACK`. Ningun incidente, recurso, parametro,
-puntaje, permiso de zona o log generado por la simulacion queda persistido.
+puntaje, permiso de zona, log ni avance de secuencia generado por la simulacion queda
+persistido. Las secuencias se restauran explicitamente porque PostgreSQL no las revierte
+automaticamente con `ROLLBACK`.
 
 Durante la corrida se modifican filas y se toman locks dentro de la sesion. Por eso no debe
 ejecutarse sobre una base compartida con usuarios activos.
