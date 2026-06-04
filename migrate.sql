@@ -25,5 +25,22 @@
 -- 4. Carga de datos inicial (DML) de catálogos y registros operativos.
 \ir database/carga-dataset.sql
 
--- 5. Creación de vistas de monitoreo y reglas activas.
+-- 5. Vistas de monitoreo.
 \ir database/create-views.sql
+
+-- 6. Reglas activas, en módulos. ORDEN IMPORTANTE:
+--    a) reglas-validadoras  -> validaciones BEFORE (R8/R9/R10/R11 + tipo aplicable).
+--    b) reglas-inteligencia  -> mantiene Recurso.puntaje (R14). DEBE cargarse antes del motor.
+--    c) reglas-automatizacion -> motor de asignación y ciclo operativo (R1/R2/R3/R5/R7/R8/R9/R14/R21);
+--                                el motor ordena por el puntaje que mantiene (b).
+--
+--    NOTA: database/create-triggers.sql NO se carga a propósito. Es un script de REFERENCIA
+--    generado con IA que no respeta las reglas del proyecto; se conserva solo a mano. Las reglas
+--    que solo vivían ahí (R12, R13, R15, R16, R17, R20) quedan PENDIENTES de implementar en módulos.
+\ir database/triggers/reglas-validadoras.sql
+\ir database/triggers/reglas-inteligencia.sql
+\ir database/triggers/reglas-automatizacion.sql
+
+-- 7. Procedimientos Almacenados (P1/P2/P3/P4/P5)
+\ir database/store-procedures/asignar-recurso.sql
+
