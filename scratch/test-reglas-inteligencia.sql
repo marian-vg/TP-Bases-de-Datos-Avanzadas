@@ -285,9 +285,9 @@ $$;
 
 
 -- ----------------------------------------------------------------------------
--- PRUEBA 5: R14 — una penalización resta TipoPenalizacion.puntaje
+-- PRUEBA 5: R14 — una penalización resta COALESCE(Penalizacion.puntaje, TipoPenalizacion.puntaje)
 -- ----------------------------------------------------------------------------
-\echo '>>> PRUEBA 5: R14 — la penalización descuenta puntaje según su tipo'
+\echo '>>> PRUEBA 5: R14 — la penalización descuenta puntaje por COALESCE explícito/default'
 
 DO $$
 DECLARE
@@ -295,6 +295,7 @@ DECLARE
     v_tipo      INT;
     v_resta     INT;
     v_puntaje   INT;
+    v_resta_variable INT := 7;
 BEGIN
     SELECT id_recurso INTO v_rec FROM Recurso WHERE fk_estado_recurso_id = 1 ORDER BY id_recurso LIMIT 1;
 
@@ -305,6 +306,7 @@ BEGIN
     SELECT id_tipo_penalizacion, puntaje INTO v_tipo, v_resta
     FROM TipoPenalizacion WHERE nombre LIKE 'Falla en intervenci%n';
 
+    -- Caso default: Penalizacion.puntaje NULL -> usa TipoPenalizacion.puntaje.
     INSERT INTO Penalizacion (fk_recurso_id, fk_tipo_penalizacion_id, motivo)
     VALUES (v_rec, v_tipo, 'P5 - prueba de descuento de puntaje');
 
@@ -313,7 +315,17 @@ BEGIN
         RAISE EXCEPTION 'FALLO R14(penalización): esperado % (10 - %), obtenido %.', 10 - v_resta, v_resta, v_puntaje;
     END IF;
 
-    RAISE NOTICE 'ÉXITO P5: la penalización restó % puntos (puntaje 10 -> %).', v_resta, v_puntaje;
+    -- Caso variable: Penalizacion.puntaje explícito -> usa ese monto real.
+    UPDATE Recurso SET puntaje = 10 WHERE id_recurso = v_rec;
+    INSERT INTO Penalizacion (fk_recurso_id, fk_tipo_penalizacion_id, puntaje, motivo)
+    VALUES (v_rec, v_tipo, v_resta_variable, 'P5 - prueba de descuento variable');
+
+    SELECT puntaje INTO v_puntaje FROM Recurso WHERE id_recurso = v_rec;
+    IF v_puntaje <> 10 - v_resta_variable THEN
+        RAISE EXCEPTION 'FALLO R14(penalización variable): esperado % (10 - %), obtenido %.', 10 - v_resta_variable, v_resta_variable, v_puntaje;
+    END IF;
+
+    RAISE NOTICE 'ÉXITO P5: COALESCE restó default % y luego puntaje variable %.', v_resta, v_resta_variable;
 
     DELETE FROM Penalizacion WHERE fk_recurso_id = v_rec;
     UPDATE Recurso SET puntaje = 0 WHERE id_recurso = v_rec;

@@ -73,6 +73,7 @@ CREATE TABLE SLA (
     id_sla SERIAL PRIMARY KEY,
     fk_gravedad_id INT NOT NULL,
     tiempo_respuesta_minutos INT NOT NULL,
+    minutos_por_punto_demora INT NOT NULL, -- Tramo de exceso sobre el SLA que equivale a 1 punto de penalización por demora (P4)
     CONSTRAINT fk_sla_gravedad FOREIGN KEY (fk_gravedad_id) 
         REFERENCES Gravedad(id_gravedad) ON DELETE RESTRICT
 );
@@ -234,6 +235,7 @@ CREATE TABLE Penalizacion (
     fk_tipo_penalizacion_id INT NOT NULL,
     fecha DATE NOT NULL DEFAULT CURRENT_DATE,
     hora TIME NOT NULL DEFAULT CURRENT_TIME,
+    puntaje INT NULL, -- Puntos reales de esta penalización; NULL usa TipoPenalizacion.puntaje vía COALESCE (R4/R9 conservan el default, P4 calcula proporcional).
     motivo TEXT NOT NULL,
     CONSTRAINT fk_penalizacion_recurso FOREIGN KEY (fk_recurso_id) 
         REFERENCES Recurso(id_recurso) ON DELETE CASCADE,

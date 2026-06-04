@@ -24,10 +24,10 @@ RETURNS TRIGGER AS $$
 DECLARE
     v_resta INT;
 BEGIN
-    SELECT COALESCE(puntaje, 0)
+    SELECT COALESCE(NEW.puntaje, tp.puntaje, 0)
     INTO v_resta
-    FROM TipoPenalizacion
-    WHERE id_tipo_penalizacion = NEW.fk_tipo_penalizacion_id;
+    FROM TipoPenalizacion tp
+    WHERE tp.id_tipo_penalizacion = NEW.fk_tipo_penalizacion_id;
 
     UPDATE Recurso
     SET puntaje = puntaje - v_resta

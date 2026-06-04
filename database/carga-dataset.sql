@@ -57,7 +57,7 @@
 \copy Gravedad (id_gravedad, nombre) FROM 'data/03_gravedad.csv' WITH (FORMAT csv, HEADER true, DELIMITER ',');
 
 -- 04. SLA (Acuerdos de Nivel de Servicio)
-\copy SLA (id_sla, fk_gravedad_id, tiempo_respuesta_minutos) FROM 'data/04_sla.csv' WITH (FORMAT csv, HEADER true, DELIMITER ',');
+\copy SLA (id_sla, fk_gravedad_id, tiempo_respuesta_minutos, minutos_por_punto_demora) FROM 'data/04_sla.csv' WITH (FORMAT csv, HEADER true, DELIMITER ',');
 
 -- 05. Nivel de Riesgo
 \copy NivelRiesgo (id_nivel_riesgo, nombre, valor) FROM 'data/05_nivel_riesgo.csv' WITH (FORMAT csv, HEADER true, DELIMITER ',');

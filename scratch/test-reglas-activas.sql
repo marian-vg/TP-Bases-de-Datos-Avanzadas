@@ -49,7 +49,7 @@ DECLARE
     v_incidente   INT;
     v_n_asig      INT;
     v_estado_inc  TEXT;
-    v_n_ocupados  INT;
+    v_n_transito  INT;
 BEGIN
     SELECT id_estado_incidente INTO v_pendiente FROM EstadoIncidente WHERE nombre = 'Pendiente';
 
@@ -72,14 +72,14 @@ BEGIN
         RAISE EXCEPTION 'FALLO R2: el incidente debía quedar En proceso, quedó %.', v_estado_inc;
     END IF;
 
-    -- R8: los recursos asignados deben quedar 'Ocupado'.
-    SELECT count(*) INTO v_n_ocupados
+    -- R8: los recursos asignados deben quedar 'En tránsito' hasta que registren arribo.
+    SELECT count(*) INTO v_n_transito
     FROM Asignacion a
     JOIN Recurso r ON a.fk_recurso_id = r.id_recurso
     JOIN EstadoRecurso er ON r.fk_estado_recurso_id = er.id_estado_recurso
-    WHERE a.fk_incidente_id = v_incidente AND er.nombre = 'Ocupado';
-    IF v_n_ocupados <> 2 THEN
-        RAISE EXCEPTION 'FALLO R8: los 2 recursos debían quedar Ocupado, ocupados %.', v_n_ocupados;
+    WHERE a.fk_incidente_id = v_incidente AND er.nombre = 'En tránsito';
+    IF v_n_transito <> 2 THEN
+        RAISE EXCEPTION 'FALLO R8: los 2 recursos debían quedar En tránsito, en tránsito %.', v_n_transito;
     END IF;
 
     -- R3: el alta del incidente debe haberse auditado en Log.
@@ -88,7 +88,7 @@ BEGIN
         RAISE EXCEPTION 'FALLO R3: no se registró en Log la auditoría del incidente %.', v_incidente;
     END IF;
 
-    RAISE NOTICE 'ÉXITO P1: R1+R5 (2 asignaciones), R2 (En proceso), R8 (2 Ocupado), R3 (auditado).';
+    RAISE NOTICE 'ÉXITO P1: R1+R5 (2 asignaciones), R2 (En proceso), R8 (2 En tránsito), R3 (auditado).';
 
     -- Limpieza
     DELETE FROM Asignacion WHERE fk_incidente_id = v_incidente;
@@ -248,6 +248,7 @@ DECLARE
     v_estado_rec  TEXT;
     v_total       INT;
     v_abiertas    INT;
+    v_abiertas_transito INT;
 BEGIN
     SELECT id_estado_incidente INTO v_pendiente FROM EstadoIncidente WHERE nombre = 'Pendiente';
 
@@ -287,14 +288,24 @@ BEGIN
     -- Reasignación: 2 originales + 1 reemplazo = 3 totales; la fallida cerrada => 2 abiertas.
     SELECT count(*) INTO v_total FROM Asignacion WHERE fk_incidente_id = v_incidente;
     SELECT count(*) INTO v_abiertas FROM Asignacion WHERE fk_incidente_id = v_incidente AND timestamp_finalizacion IS NULL;
+    SELECT count(*) INTO v_abiertas_transito
+    FROM Asignacion a
+    JOIN Recurso r ON r.id_recurso = a.fk_recurso_id
+    JOIN EstadoRecurso er ON er.id_estado_recurso = r.fk_estado_recurso_id
+    WHERE a.fk_incidente_id = v_incidente
+      AND a.timestamp_finalizacion IS NULL
+      AND er.nombre = 'En tránsito';
     IF v_total <> 3 THEN
         RAISE EXCEPTION 'FALLO R4: tras reasignar esperaba 3 asignaciones totales, hay %.', v_total;
     END IF;
     IF v_abiertas <> 2 THEN
         RAISE EXCEPTION 'FALLO R4: esperaba 2 asignaciones abiertas, hay %.', v_abiertas;
     END IF;
+    IF v_abiertas_transito <> 2 THEN
+        RAISE EXCEPTION 'FALLO R8: las 2 asignaciones abiertas debían estar En tránsito, hay %.', v_abiertas_transito;
+    END IF;
 
-    RAISE NOTICE 'ÉXITO P5: R4/R9 penalizó, cerró la fallida, liberó el recurso y reasignó (3 total / 2 abiertas).';
+    RAISE NOTICE 'ÉXITO P5: R4/R9 penalizó, cerró la fallida, liberó el recurso y reasignó (3 total / 2 abiertas En tránsito).';
 
     -- Limpieza
     DELETE FROM Asignacion WHERE fk_incidente_id = v_incidente;
@@ -383,6 +394,101 @@ BEGIN
     RAISE NOTICE 'ÉXITO P7: R20 dejó el incidente en Pendiente al superarse el tope de incidentes activos de la zona.';
 
     DELETE FROM Incidente WHERE id_incidente = v_incidente;
+END;
+$$;
+
+-- ----------------------------------------------------------------------------
+-- PRUEBA 8: P4 — Arribo tardío crea penalización proporcional por demora
+-- ----------------------------------------------------------------------------
+\echo '>>> PRUEBA 8: P4 — arribo tardío descuenta puntaje proporcional al exceso sobre SLA'
+
+DO $$
+DECLARE
+    v_pendiente       INT;
+    v_estado_ocupado  INT;
+    v_incidente       INT;
+    v_asig            INT;
+    v_recurso         INT;
+    v_sla             INT;
+    v_tramo           INT;
+    v_puntos          INT;
+    v_puntaje_final   INT;
+    v_timestamp_llegada TIMESTAMP;
+    v_penalizaciones  INT;
+BEGIN
+    SELECT id_estado_incidente INTO v_pendiente FROM EstadoIncidente WHERE nombre = 'Pendiente';
+    SELECT id_estado_recurso   INTO v_estado_ocupado FROM EstadoRecurso WHERE nombre = 'Ocupado';
+    SELECT tiempo_respuesta_minutos, minutos_por_punto_demora
+      INTO v_sla, v_tramo
+    FROM SLA WHERE fk_gravedad_id = 3;  -- Alta: SLA 10, tramo 2 en el dataset.
+
+    INSERT INTO Incidente (fk_tipo_incidente_id, fk_gravedad_id, fk_estado_incidente_id, fk_zona_id, descripcion, prioridad)
+    VALUES (1, 3, v_pendiente, 1, 'P8 - demora de arribo proporcional', 3)
+    RETURNING id_incidente INTO v_incidente;
+
+    SELECT id_asignacion, fk_recurso_id
+      INTO v_asig, v_recurso
+    FROM Asignacion
+    WHERE fk_incidente_id = v_incidente
+    ORDER BY id_asignacion
+    LIMIT 1;
+
+    IF v_asig IS NULL THEN
+        RAISE EXCEPTION 'PRECONDICIÓN FALLIDA: no hubo asignación para probar P4.';
+    END IF;
+
+    UPDATE Recurso SET puntaje = 0 WHERE id_recurso = v_recurso;
+
+    -- Simulamos demora: llegada 17 minutos después de asignar.
+    -- Para gravedad Alta: exceso = 17 - 10 = 7; tramo = 2; floor(7/2) = 3 puntos.
+    UPDATE Asignacion
+    SET timestamp_asignacion = CURRENT_TIMESTAMP - INTERVAL '17 minutes'
+    WHERE id_asignacion = v_asig;
+
+    v_puntos := floor((17 - v_sla)::NUMERIC / v_tramo);
+
+    -- Arribo: En tránsito -> Ocupado. El trigger completa timestamp_llegada y llama a P4.
+    UPDATE Recurso
+    SET fk_estado_recurso_id = v_estado_ocupado
+    WHERE id_recurso = v_recurso;
+
+    SELECT timestamp_llegada INTO v_timestamp_llegada FROM Asignacion WHERE id_asignacion = v_asig;
+    IF v_timestamp_llegada IS NULL THEN
+        RAISE EXCEPTION 'FALLO P4: el arribo no completó timestamp_llegada.';
+    END IF;
+
+    SELECT count(*) INTO v_penalizaciones
+    FROM Penalizacion p
+    JOIN TipoPenalizacion tp ON tp.id_tipo_penalizacion = p.fk_tipo_penalizacion_id
+    WHERE p.fk_recurso_id = v_recurso
+      AND p.puntaje = v_puntos
+      AND tp.nombre = 'Demora grave'
+      AND p.motivo LIKE 'Demora de %';
+    IF v_penalizaciones <> 1 THEN
+        RAISE EXCEPTION 'FALLO P4: esperaba 1 Penalizacion de demora grave con puntaje %, encontré %.', v_puntos, v_penalizaciones;
+    END IF;
+
+    SELECT puntaje INTO v_puntaje_final FROM Recurso WHERE id_recurso = v_recurso;
+    IF v_puntaje_final <> -v_puntos THEN
+        RAISE EXCEPTION 'FALLO P4/R14: esperaba puntaje % tras descuento proporcional, quedó %.', -v_puntos, v_puntaje_final;
+    END IF;
+
+    IF NOT EXISTS (
+        SELECT 1 FROM Log
+        WHERE operacion = 'DECISION'
+          AND detalle->>'regla' = 'P4'
+          AND idTablaAfectada = v_recurso
+    ) THEN
+        RAISE EXCEPTION 'FALLO P4/R18: no se registró la decisión automática P4.';
+    END IF;
+
+    RAISE NOTICE 'ÉXITO P8: arribo tardío generó Penalizacion proporcional (% puntos) y descontó el Recurso.', v_puntos;
+
+    DELETE FROM Asignacion WHERE fk_incidente_id = v_incidente;
+    DELETE FROM Penalizacion WHERE fk_recurso_id = v_recurso;
+    DELETE FROM Incidente WHERE id_incidente = v_incidente;
+    UPDATE Recurso SET fk_estado_recurso_id = 1, puntaje = 0 WHERE id_recurso = v_recurso;
+    UPDATE Recurso SET fk_estado_recurso_id = 1 WHERE fk_estado_recurso_id <> 1;
 END;
 $$;
 

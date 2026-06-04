@@ -17,7 +17,7 @@
 --   R4/R9  Asignación fallida: penaliza el recurso, lo libera y reasigna uno nuevo.
 --   R5     Cantidad de recursos según gravedad (Baja/Moderada=1, Alta=2, Crítica=3, Catastrófica=4).
 --   R7     Cierre automático del incidente ('Resuelto') cuando finalizan todas sus asignaciones.
---   R8     Estado del recurso según su asignación ('Disponible' <-> 'Ocupado').
+--   R8     Estado del recurso según su asignación ('Disponible' -> 'En tránsito' -> 'Ocupado' -> 'Disponible').
 --   R14    Selección del mejor recurso: el motor ordena los candidatos por Recurso.puntaje DESC.
 --          El puntaje lo mantiene database/triggers/reglas-inteligencia.sql (cargar ANTES que este).
 --   R21    Promoción de evento a incidente solo si la confianza del sensor supera el umbral y el
@@ -211,7 +211,7 @@ EXECUTE FUNCTION fn_asignacion_automatica();
 -- =============================================================================================================
 --
 -- Al insertar una asignación nueva:
---   R8 (efecto): pasa el recurso asignado de 'Disponible' a 'Ocupado'.
+--   R8 (efecto): pasa el recurso asignado de 'Disponible' a 'En tránsito'.
 --   R2: si el incidente asociado aún está en 'Pendiente', lo mueve a 'En proceso'.
 --       No se toca si el incidente ya está en cualquier otro estado posterior (En proceso,
 --       Escalado, etc.) para no pisar transiciones legítimas posteriores.
@@ -219,12 +219,13 @@ EXECUTE FUNCTION fn_asignacion_automatica();
 CREATE OR REPLACE FUNCTION fn_asignacion_aplicada()
 RETURNS TRIGGER AS $$
 BEGIN
-    -- R8: marcar el recurso como 'Ocupado' ahora que tiene una asignación activa.
+    -- R8: marcar el recurso como 'En tránsito' ahora que tiene una asignación activa.
+    --     El paso a 'Ocupado' representa el arribo y dispara P4 (penalización por demora).
     UPDATE Recurso
     SET fk_estado_recurso_id = (
         SELECT id_estado_recurso
         FROM EstadoRecurso
-        WHERE nombre = 'Ocupado'
+        WHERE nombre = 'En tránsito'
     )
     WHERE id_recurso = NEW.fk_recurso_id;
 
@@ -253,6 +254,142 @@ CREATE TRIGGER trg_asignacion_aplicada
 AFTER INSERT ON Asignacion
 FOR EACH ROW
 EXECUTE FUNCTION fn_asignacion_aplicada();
+
+-- =============================================================================================================
+-- 5. P4 — sp_CalcularPenalizacion
+-- =============================================================================================================
+--
+-- Penaliza la demora de arribo del recurso solo por el exceso sobre el SLA de la gravedad del incidente.
+-- Es el espejo del bonus SLA de R14: dentro del SLA no penaliza y queda elegible al bonus al cerrar;
+-- fuera del SLA penaliza al arribar con un puntaje proporcional.
+
+CREATE OR REPLACE PROCEDURE sp_CalcularPenalizacion(p_id_asignacion INT)
+LANGUAGE plpgsql
+AS $$
+DECLARE
+    v_recurso_id                 INT;
+    v_incidente_id               INT;
+    v_timestamp_asignacion       TIMESTAMP;
+    v_timestamp_llegada          TIMESTAMP;
+    v_sla_minutos                INT;
+    v_minutos_por_punto_demora   INT;
+    v_minutos_respuesta          NUMERIC;
+    v_exceso_minutos             NUMERIC;
+    v_puntos                     INT;
+    v_tipo_penalizacion_id       INT;
+    v_tipo_penalizacion_nombre   TEXT;
+BEGIN
+    SELECT a.fk_recurso_id, a.fk_incidente_id, a.timestamp_asignacion, a.timestamp_llegada,
+           s.tiempo_respuesta_minutos, s.minutos_por_punto_demora
+      INTO v_recurso_id, v_incidente_id, v_timestamp_asignacion, v_timestamp_llegada,
+           v_sla_minutos, v_minutos_por_punto_demora
+    FROM Asignacion a
+    JOIN Incidente i ON i.id_incidente = a.fk_incidente_id
+    JOIN SLA s       ON s.fk_gravedad_id = i.fk_gravedad_id
+    WHERE a.id_asignacion = p_id_asignacion;
+
+    IF v_recurso_id IS NULL OR v_timestamp_llegada IS NULL THEN
+        RETURN;
+    END IF;
+
+    v_minutos_respuesta := EXTRACT(EPOCH FROM (v_timestamp_llegada - v_timestamp_asignacion)) / 60;
+    v_exceso_minutos := v_minutos_respuesta - v_sla_minutos;
+
+    IF v_exceso_minutos <= 0 THEN
+        RETURN;
+    END IF;
+
+    v_puntos := floor(v_exceso_minutos / v_minutos_por_punto_demora);
+    IF v_puntos <= 0 THEN
+        RETURN;
+    END IF;
+
+    v_tipo_penalizacion_nombre := CASE
+        WHEN v_puntos = 1 THEN 'Demora leve'
+        WHEN v_puntos = 2 THEN 'Demora moderada'
+        ELSE 'Demora grave'
+    END;
+
+    SELECT id_tipo_penalizacion
+      INTO v_tipo_penalizacion_id
+    FROM TipoPenalizacion
+    WHERE nombre = v_tipo_penalizacion_nombre;
+
+    IF v_tipo_penalizacion_id IS NULL THEN
+        RAISE EXCEPTION 'No existe TipoPenalizacion para %.', v_tipo_penalizacion_nombre;
+    END IF;
+
+    INSERT INTO Penalizacion (fk_recurso_id, fk_tipo_penalizacion_id, puntaje, motivo)
+    VALUES (
+        v_recurso_id,
+        v_tipo_penalizacion_id,
+        v_puntos,
+        'Demora de ' || floor(v_minutos_respuesta)::INT || ' min (' ||
+        floor(v_exceso_minutos)::INT || ' sobre SLA) en asignación #' || p_id_asignacion ||
+        ' para el incidente #' || v_incidente_id || '.'
+    );
+
+    PERFORM fn_registrar_decision('recurso', v_recurso_id, 'P4',
+        'Demora de ' || floor(v_minutos_respuesta)::INT || ' min (' ||
+        floor(v_exceso_minutos)::INT || ' sobre SLA): -' || v_puntos || ' puntos');
+END;
+$$;
+
+
+-- =============================================================================================================
+-- 6. P4/R8(arribo) — fn_arribo_recurso / trg_arribo_recurso
+-- =============================================================================================================
+--
+-- Al pasar un recurso de 'En tránsito' a 'Ocupado', se interpreta como arribo al lugar:
+-- completa timestamp_llegada en la asignación abierta y calcula la penalización proporcional si llegó tarde.
+
+CREATE OR REPLACE FUNCTION fn_arribo_recurso()
+RETURNS TRIGGER AS $$
+DECLARE
+    v_estado_old TEXT;
+    v_estado_new TEXT;
+    v_asignacion INT;
+BEGIN
+    SELECT nombre INTO v_estado_old
+    FROM EstadoRecurso
+    WHERE id_estado_recurso = OLD.fk_estado_recurso_id;
+
+    SELECT nombre INTO v_estado_new
+    FROM EstadoRecurso
+    WHERE id_estado_recurso = NEW.fk_estado_recurso_id;
+
+    IF v_estado_old <> 'En tránsito' OR v_estado_new <> 'Ocupado' THEN
+        RETURN NEW;
+    END IF;
+
+    SELECT id_asignacion
+      INTO v_asignacion
+    FROM Asignacion
+    WHERE fk_recurso_id = NEW.id_recurso
+      AND timestamp_finalizacion IS NULL
+      AND timestamp_llegada IS NULL
+    ORDER BY id_asignacion
+    LIMIT 1;
+
+    IF v_asignacion IS NULL THEN
+        RETURN NEW;
+    END IF;
+
+    UPDATE Asignacion
+    SET timestamp_llegada = CURRENT_TIMESTAMP
+    WHERE id_asignacion = v_asignacion;
+
+    CALL sp_CalcularPenalizacion(v_asignacion);
+
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS trg_arribo_recurso ON Recurso;
+CREATE TRIGGER trg_arribo_recurso
+AFTER UPDATE OF fk_estado_recurso_id ON Recurso
+FOR EACH ROW
+EXECUTE FUNCTION fn_arribo_recurso();
 -- =============================================================================================================
 -- BLOQUE: GESTIÓN DE FINALIZACIÓN DE ASIGNACIONES (R8 + R4/R9 + R7)
 -- =============================================================================================================
