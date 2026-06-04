@@ -12,7 +12,7 @@ param(
 $ErrorActionPreference = 'Stop'
 
 function Invoke-Git {
-    param([Parameter(ValueFromRemainingArguments = $true)][string[]]$Arguments)
+    param([Parameter(Mandatory = $true)][string[]]$Arguments)
 
     & git @Arguments
     if ($LASTEXITCODE -ne 0) {
@@ -57,7 +57,7 @@ $resolvedPaths = foreach ($path in $Paths) {
     $path
 }
 
-Invoke-Git add -- $resolvedPaths
+Invoke-Git -Arguments (@('add', '--') + $resolvedPaths)
 
 $staged = @(& git diff --cached --name-only)
 if ($LASTEXITCODE -ne 0 -or $staged.Count -eq 0) {
@@ -66,14 +66,14 @@ if ($LASTEXITCODE -ne 0 -or $staged.Count -eq 0) {
 
 $unexpected = @($staged | Where-Object { $_ -notin $resolvedPaths })
 if ($unexpected.Count -gt 0) {
-    Invoke-Git restore --staged -- $staged
+    Invoke-Git -Arguments (@('restore', '--staged', '--') + $staged)
     throw "Unexpected paths were staged: $($unexpected -join ', ')"
 }
 
 & git diff --cached --check
 if ($LASTEXITCODE -ne 0) {
-    Invoke-Git restore --staged -- $staged
+    Invoke-Git -Arguments (@('restore', '--staged', '--') + $staged)
     throw 'git diff --cached --check failed.'
 }
 
-Invoke-Git commit -m $Message
+Invoke-Git -Arguments @('commit', '-m', $Message)
