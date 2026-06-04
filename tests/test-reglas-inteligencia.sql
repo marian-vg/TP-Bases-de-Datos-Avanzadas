@@ -114,7 +114,7 @@ $$;
 -- así controlamos exactamente qué asignaciones recibe cada recurso.
 ALTER TABLE Incidente DISABLE TRIGGER trg_asignacion_automatica;
 
-
+ALTER TABLE Incidente DISABLE TRIGGER trg_valida_registro_incidente;
 -- ----------------------------------------------------------------------------
 -- PRUEBA 2: R14 — una asignación exitosa suma +1
 -- ----------------------------------------------------------------------------
@@ -303,7 +303,7 @@ BEGIN
     DELETE FROM Penalizacion WHERE fk_recurso_id = v_rec;
 
     SELECT id_tipo_penalizacion, puntaje INTO v_tipo, v_resta
-      FROM TipoPenalizacion WHERE nombre = 'Falla en intervención';
+    FROM TipoPenalizacion WHERE nombre LIKE 'Falla en intervenci%n';
 
     INSERT INTO Penalizacion (fk_recurso_id, fk_tipo_penalizacion_id, motivo)
     VALUES (v_rec, v_tipo, 'P5 - prueba de descuento de puntaje');
@@ -340,9 +340,8 @@ BEGIN
     v_esperado := 3 * 10;  -- gravedad Alta (3) -> 30, según la especificación de R12
 
     ALTER TABLE Incidente DISABLE TRIGGER trg_asignacion_automatica;
-    -- Pasamos una prioridad "basura" (99) a propósito: R12 debería sobrescribirla.
     INSERT INTO Incidente (fk_tipo_incidente_id, fk_gravedad_id, fk_estado_incidente_id, fk_zona_id, descripcion, prioridad)
-    VALUES (1, 3, v_pendiente, 1, 'P6 - R12 prioridad por gravedad', 99) RETURNING id_incidente INTO v_inc;
+    VALUES (1, 3, v_pendiente, 5, 'P6 - R12 prioridad por gravedad', 99) RETURNING id_incidente INTO v_inc;
     ALTER TABLE Incidente ENABLE TRIGGER trg_asignacion_automatica;
 
     SELECT prioridad INTO v_prioridad FROM Incidente WHERE id_incidente = v_inc;
@@ -350,7 +349,7 @@ BEGIN
     IF v_prioridad = v_esperado THEN
         RAISE NOTICE 'ÉXITO R12: prioridad calculada automáticamente (% para gravedad Alta).', v_prioridad;
     ELSE
-        RAISE WARNING 'PENDIENTE R12: esperado prioridad %, se obtuvo % (regla aún no implementada en módulos).', v_esperado, v_prioridad;
+        RAISE EXCEPTION 'FALLO R12: esperado prioridad %, se obtuvo %.', v_esperado, v_prioridad;
     END IF;
 
     DELETE FROM Incidente WHERE id_incidente = v_inc;
@@ -398,7 +397,7 @@ BEGIN
     IF v_prio_alta > v_prio_baja THEN
         RAISE NOTICE 'ÉXITO R13: zona de alto riesgo tiene mayor prioridad (% vs %).', v_prio_alta, v_prio_baja;
     ELSE
-        RAISE WARNING 'PENDIENTE R13: zona de alto riesgo (%) no superó a la de bajo riesgo (%) (regla aún no implementada en módulos).', v_prio_alta, v_prio_baja;
+        RAISE EXCEPTION 'FALLO R13: zona de alto riesgo (%) no superó a la de bajo riesgo (%).', v_prio_alta, v_prio_baja;
     END IF;
 
     DELETE FROM Incidente WHERE id_incidente IN (v_inc_alta, v_inc_baja);
@@ -436,7 +435,7 @@ BEGIN
     IF v_n_asig >= 1 THEN
         RAISE NOTICE 'ÉXITO R15: se rebalanceó un recurso de otra zona (% asignación/es).', v_n_asig;
     ELSE
-        RAISE WARNING 'PENDIENTE R15: sin recursos locales el incidente quedó sin asignar (rebalanceo no implementado en módulos).';
+        RAISE EXCEPTION 'FALLO R15: sin recursos locales el incidente quedó sin asignar (no hubo rebalanceo).';
     END IF;
 
     DELETE FROM Asignacion WHERE fk_incidente_id = v_inc;
@@ -454,6 +453,10 @@ DELETE FROM Evento;
 DELETE FROM Log;
 UPDATE Recurso SET fk_estado_recurso_id = 1 WHERE fk_estado_recurso_id <> 1;
 UPDATE Recurso SET puntaje = 0 WHERE puntaje <> 0;
+
+-- Rehabilitar los triggers apagados
+ALTER TABLE Incidente ENABLE TRIGGER trg_asignacion_automatica;
+ALTER TABLE Incidente ENABLE TRIGGER trg_valida_registro_incidente;
 
 \echo '--------------------------------------------------'
 \echo '>>> PRUEBAS DE INTELIGENCIA FINALIZADAS'
