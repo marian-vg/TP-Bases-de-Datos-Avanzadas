@@ -164,76 +164,89 @@ EXECUTE FUNCTION fn_prioridad_incidente();
 
 
 -- =============================================================================================================
--- 4. fn_rebalanceo_recursos / trg_rebalanceo_recursos — R15
+-- 4. fn_rebalancear_zona — R15
 -- =============================================================================================================
+--
+-- Función plana (sin trigger) que invoca el motor de asignación ante escasez real.
+-- Recibe la zona desabastecida y el tipo de recurso necesario.
+--
+-- Lógica:
+--   - Si la zona ya tiene al menos un Recurso 'Disponible' del tipo indicado habilitado
+--     en ella (fila en ZonaRecurso), no hace nada y retorna NULL.
+--   - Si no: busca el mejor candidato de otra zona — 'Disponible', mismo tipo, no habilitado
+--     aún en p_id_zona — ordenando por nivel de riesgo de zona base ASC (presta primero
+--     desde zonas de menor riesgo) y por puntaje DESC; LIMIT 1.
+--   - Si encuentra candidato: lo habilita en ZonaRecurso, lo registra en Log y retorna
+--     su id_recurso.
+--   - Si no hay candidato: retorna NULL.
+--
+-- La habilitación en ZonaRecurso es permanente a propósito: es una ampliación legítima
+-- de la cobertura M:N. El recurso vuelve a 'Disponible' por R8 al terminar la asignación.
 
-CREATE OR REPLACE FUNCTION fn_rebalanceo_recursos()
-RETURNS TRIGGER AS $$
+CREATE OR REPLACE FUNCTION fn_rebalancear_zona(p_id_zona INT, p_id_tipo_recurso INT)
+RETURNS INT AS $$
 DECLARE
-    v_zona_recurso RECORD;
-    v_disponibles INT;
-    v_recurso_prestado INT;
+    v_id_estado_disponible INT;
+    v_candidato            INT;
 BEGIN
-    -- Solo actuamos si el recurso dejó de estar 'Disponible'
-    IF OLD.fk_estado_recurso_id = 1 AND NEW.fk_estado_recurso_id <> 1 THEN
-        
-        -- Analizamos TODAS las zonas en las que este recurso operaba
-        FOR v_zona_recurso IN (SELECT id_zona FROM ZonaRecurso WHERE id_recurso = NEW.id_recurso) LOOP
-            
-            -- Verificamos cuántos recursos disponibles de este MISMO TIPO quedan en la zona afectada
-            SELECT COUNT(r.id_recurso) INTO v_disponibles
-            FROM Recurso r
-            JOIN ZonaRecurso zr ON r.id_recurso = zr.id_recurso
-            WHERE zr.id_zona = v_zona_recurso.id_zona
-              AND r.fk_tipo_recurso_id = NEW.fk_tipo_recurso_id
-              AND r.fk_estado_recurso_id = 1;
+    -- Resolvemos 'Disponible' por nombre para no depender del orden del seed
+    SELECT id_estado_recurso
+    INTO v_id_estado_disponible
+    FROM EstadoRecurso
+    WHERE nombre = 'Disponible';
 
-            -- Si la zona se quedó sin cobertura para este tipo de emergencia, rebalanceamos
-            IF v_disponibles = 0 THEN
-                
-                -- Buscamos un reemplazo del mismo tipo, priorizando zonas de bajo riesgo y luego el mejor puntaje (R14)
-                SELECT r.id_recurso INTO v_recurso_prestado
-                FROM Recurso r
-                JOIN Zona z ON r.fk_zona_base_id = z.id_zona
-                JOIN NivelRiesgo nr ON z.fk_nivel_riesgo_id = nr.id_nivel_riesgo
-                WHERE r.fk_tipo_recurso_id = NEW.fk_tipo_recurso_id
-                  AND r.fk_estado_recurso_id = 1
-                  AND NOT EXISTS (
-                      SELECT 1 FROM ZonaRecurso zr2 
-                      WHERE zr2.id_recurso = r.id_recurso AND zr2.id_zona = v_zona_recurso.id_zona
-                  )
-                ORDER BY nr.valor ASC, r.puntaje DESC
-                LIMIT 1;
-
-                -- Insertamos el permiso de zona y logueamos la decisión automática
-                IF v_recurso_prestado IS NOT NULL THEN
-                    INSERT INTO ZonaRecurso (id_zona, id_recurso)
-                    VALUES (v_zona_recurso.id_zona, v_recurso_prestado);
-
-                    INSERT INTO Log (tablaAfectada, idTablaAfectada, operacion, trigger_disparador, detalle)
-                    VALUES (
-                        'ZonaRecurso', 
-                        v_recurso_prestado, 
-                        'INSERT', 
-                        TG_NAME, 
-                        jsonb_build_object(
-                            'motivo', 'R15: Rebalanceo automático por agotamiento de recursos tipo ' || NEW.fk_tipo_recurso_id,
-                            'zona_desabastecida', v_zona_recurso.id_zona,
-                            'recurso_prestado', v_recurso_prestado
-                        )
-                    );
-                END IF;
-                
-            END IF;
-        END LOOP;
+    -- Verificamos si la zona ya tiene cobertura del tipo solicitado
+    IF EXISTS (
+        SELECT 1
+        FROM ZonaRecurso zr
+        JOIN Recurso r ON r.id_recurso = zr.id_recurso
+        WHERE zr.id_zona    = p_id_zona
+          AND r.fk_tipo_recurso_id   = p_id_tipo_recurso
+          AND r.fk_estado_recurso_id = v_id_estado_disponible
+    ) THEN
+        RETURN NULL;
     END IF;
 
-    RETURN NEW;
+    -- Buscamos el mejor candidato de otra zona: menor riesgo base primero, luego mejor puntaje
+    SELECT r.id_recurso
+    INTO v_candidato
+    FROM Recurso r
+    JOIN Zona z      ON z.id_zona          = r.fk_zona_base_id
+    JOIN NivelRiesgo nr ON nr.id_nivel_riesgo = z.fk_nivel_riesgo_id
+    WHERE r.fk_tipo_recurso_id   = p_id_tipo_recurso
+      AND r.fk_estado_recurso_id = v_id_estado_disponible
+      AND NOT EXISTS (
+          SELECT 1
+          FROM ZonaRecurso zr2
+          WHERE zr2.id_recurso = r.id_recurso
+            AND zr2.id_zona    = p_id_zona
+      )
+    ORDER BY nr.valor ASC, r.puntaje DESC
+    LIMIT 1;
+
+    IF v_candidato IS NULL THEN
+        RETURN NULL;
+    END IF;
+
+    -- Habilitamos el candidato en la zona desabastecida
+    INSERT INTO ZonaRecurso (id_zona, id_recurso)
+    VALUES (p_id_zona, v_candidato);
+
+    -- Registramos la decisión en el log de auditoría
+    INSERT INTO Log (tablaAfectada, idTablaAfectada, operacion, trigger_disparador, detalle)
+    VALUES (
+        'ZonaRecurso',
+        v_candidato,
+        'INSERT',
+        'fn_rebalancear_zona',
+        jsonb_build_object(
+            'motivo',              'R15: rebalanceo por agotamiento de recursos en la zona',
+            'zona_desabastecida',  p_id_zona,
+            'tipo_recurso',        p_id_tipo_recurso,
+            'recurso_prestado',    v_candidato
+        )
+    );
+
+    RETURN v_candidato;
 END;
 $$ LANGUAGE plpgsql;
-
-DROP TRIGGER IF EXISTS trg_rebalanceo_recursos ON Recurso;
-CREATE TRIGGER trg_rebalanceo_recursos
-AFTER UPDATE OF fk_estado_recurso_id ON Recurso
-FOR EACH ROW
-EXECUTE FUNCTION fn_rebalanceo_recursos();

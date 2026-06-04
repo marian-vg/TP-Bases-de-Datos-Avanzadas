@@ -9,7 +9,9 @@
 --   create-tables.sql -> carga-dataset.sql -> reglas-validadoras.sql -> reglas-activas.sql
 --
 -- Mapa de reglas:
---   R1     Asignación automática de recursos al registrarse un incidente (respeta UMBRAL_RECURSOS_ACTIVOS).
+--   R1     Asignación automática de recursos al registrarse un incidente (respeta el tope de incidentes
+--          en atención por zona — Zona.umbral_incidentes_activos — y rebalancea la zona (R15) si está
+--          desabastecida antes de despachar).
 --   R2     El incidente pasa a 'En proceso' al asignarse un recurso.
 --   R3     Auditoría genérica de cada movimiento (una sola fn_auditoria sobre las tablas operativas).
 --   R4/R9  Asignación fallida: penaliza el recurso, lo libera y reasigna uno nuevo.
@@ -21,7 +23,8 @@
 --   R21    Promoción de evento a incidente solo si la confianza del sensor supera el umbral y el
 --          tipo de evento deriva a UN único tipo de incidente (TipoEventoTipoIncidente).
 --
--- Dependencias de esquema: tabla TipoEventoTipoIncidente y parámetro UMBRAL_RECURSOS_ACTIVOS.
+-- Dependencias de esquema: tabla TipoEventoTipoIncidente, columna Zona.umbral_incidentes_activos
+--   y la función fn_rebalancear_zona (definida en reglas-inteligencia.sql, debe cargarse antes).
 -- Convención: funciones fn_*, triggers trg_*; idempotente (CREATE OR REPLACE + DROP TRIGGER IF EXISTS).
 -- =============================================================================================================
 
@@ -131,39 +134,62 @@ $$ LANGUAGE plpgsql;
 
 
 -- =============================================================================================================
--- 3. R1 — fn_asignacion_automatica / trg_asignacion_automatica
+-- 3. R1 + R15 — fn_asignacion_automatica / trg_asignacion_automatica
 -- =============================================================================================================
 --
--- Al insertar un incidente, verifica si el sistema tiene capacidad (asignaciones abiertas
--- por debajo del umbral UMBRAL_RECURSOS_ACTIVOS, default 50). Si hay capacidad, invoca el
--- motor para despachar la cantidad de recursos que corresponde a la gravedad del incidente.
--- Si se superó el umbral, el incidente queda en estado 'Pendiente' sin asignación.
+-- Al insertar un incidente:
+--   1. Control de capacidad por zona (R20): cuenta los incidentes en atención ('En proceso' o 'Escalado')
+--      en la misma zona y los compara con Zona.umbral_incidentes_activos. Si se alcanzó el tope, el
+--      incidente queda en 'Pendiente' (su estado por defecto) sin asignar ningún recurso.
+--      Los incidentes en 'Pendiente' NO se cuentan para no bloquear la zona indefinidamente.
+--   2. Rebalanceo (R15): si hay capacidad, por cada tipo de recurso aplicable al tipo del incidente
+--      llama a fn_rebalancear_zona. La función es auto-guardada: si la zona ya tiene disponibilidad
+--      del tipo, no hace nada; si no, importa un recurso de otra zona.
+--   3. Despacho (R1): invoca fn_asignar_recursos_incidente con la cantidad que corresponde a la
+--      gravedad (fn_recursos_por_gravedad).
 
 CREATE OR REPLACE FUNCTION fn_asignacion_automatica()
 RETURNS TRIGGER AS $$
 DECLARE
-    v_umbral       INT;
-    v_asignaciones_abiertas INT;
+    v_umbral      INT;
+    v_en_atencion INT;
+    v_tipo        INT;
 BEGIN
-    -- Leer el umbral del sistema; si no está configurado, usar 50 como valor por defecto.
-    SELECT COALESCE(
-        (SELECT numero FROM ParametrosSistema WHERE nombre_parametro = 'UMBRAL_RECURSOS_ACTIVOS'),
-        50
-    ) INTO v_umbral;
+    -- 1. Control de capacidad por zona (R20): leer el tope configurado en la zona del incidente.
+    SELECT umbral_incidentes_activos
+    INTO v_umbral
+    FROM Zona
+    WHERE id_zona = NEW.fk_zona_id;
 
-    -- Contar asignaciones globalmente abiertas (sin fecha de finalización).
+    -- Contar incidentes actualmente en atención en la zona ('En proceso' o 'Escalado').
+    -- 'Pendiente' se excluye deliberadamente para no bloquear la zona indefinidamente.
     SELECT count(*)
-    INTO v_asignaciones_abiertas
-    FROM Asignacion
-    WHERE timestamp_finalizacion IS NULL;
+    INTO v_en_atencion
+    FROM Incidente i
+    JOIN EstadoIncidente ei ON ei.id_estado_incidente = i.fk_estado_incidente_id
+    WHERE i.fk_zona_id = NEW.fk_zona_id
+      AND ei.nombre IN ('En proceso', 'Escalado');
 
-    -- Solo despachar si estamos por debajo del umbral.
-    IF v_asignaciones_abiertas < v_umbral THEN
-        PERFORM fn_asignar_recursos_incidente(
-            NEW.id_incidente,
-            fn_recursos_por_gravedad(NEW.fk_gravedad_id)
-        );
+    -- Si la zona está al tope, el incidente queda en 'Pendiente' sin asignación.
+    IF v_en_atencion >= v_umbral THEN
+        RETURN NEW;
     END IF;
+
+    -- 2. Rebalanceo (R15): por cada tipo de recurso aplicable al tipo del incidente,
+    --    asegurar cobertura en la zona antes de despachar.
+    FOR v_tipo IN
+        SELECT fk_tipo_recurso_id
+        FROM TipoIncidenteTipoRecurso
+        WHERE fk_tipo_incidente_id = NEW.fk_tipo_incidente_id
+    LOOP
+        PERFORM fn_rebalancear_zona(NEW.fk_zona_id, v_tipo);
+    END LOOP;
+
+    -- 3. Despacho (R1): asignar la cantidad de recursos según gravedad del incidente.
+    PERFORM fn_asignar_recursos_incidente(
+        NEW.id_incidente,
+        fn_recursos_por_gravedad(NEW.fk_gravedad_id)
+    );
 
     RETURN NEW;
 END;

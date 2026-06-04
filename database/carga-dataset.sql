@@ -63,7 +63,7 @@
 \copy NivelRiesgo (id_nivel_riesgo, nombre, valor) FROM 'data/05_nivel_riesgo.csv' WITH (FORMAT csv, HEADER true, DELIMITER ',');
 
 -- 06. Zona Geográfica
-\copy Zona (id_zona, nombre, fk_nivel_riesgo_id) FROM 'data/06_zona.csv' WITH (FORMAT csv, HEADER true, DELIMITER ',');
+\copy Zona (id_zona, nombre, fk_nivel_riesgo_id, umbral_incidentes_activos) FROM 'data/06_zona.csv' WITH (FORMAT csv, HEADER true, DELIMITER ',');
 
 -- 07. Tipo de Sensor
 \copy TipoSensor (id_tipo_sensor, nombre) FROM 'data/07_tipo_sensor.csv' WITH (FORMAT csv, HEADER true, DELIMITER ',');

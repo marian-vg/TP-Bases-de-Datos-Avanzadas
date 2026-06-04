@@ -343,26 +343,26 @@ END;
 $$;
 
 -- ----------------------------------------------------------------------------
--- PRUEBA 7: R1 — Umbral de recursos activos superado deja el incidente Pendiente
+-- PRUEBA 7: R20 — Umbral de incidentes activos POR ZONA superado deja el incidente Pendiente
 -- ----------------------------------------------------------------------------
-\echo '>>> PRUEBA 7: Umbral de recursos activos superado -> Pendiente (R1)'
+\echo '>>> PRUEBA 7: Umbral de incidentes activos por zona superado -> Pendiente (R20)'
 
 DO $$
 DECLARE
     v_pendiente   INT;
     v_incidente   INT;
-    v_umbral_old  NUMERIC;
+    v_umbral_old  INT;
     v_n_asig      INT;
     v_estado_inc  TEXT;
 BEGIN
     SELECT id_estado_incidente INTO v_pendiente FROM EstadoIncidente WHERE nombre = 'Pendiente';
 
-    -- Forzamos el umbral a 0 para simular el sistema saturado.
-    SELECT numero INTO v_umbral_old FROM ParametrosSistema WHERE nombre_parametro = 'UMBRAL_RECURSOS_ACTIVOS';
-    UPDATE ParametrosSistema SET numero = 0 WHERE nombre_parametro = 'UMBRAL_RECURSOS_ACTIVOS';
+    -- Forzamos el tope de la zona 1 a 0 para simular esa zona saturada.
+    SELECT umbral_incidentes_activos INTO v_umbral_old FROM Zona WHERE id_zona = 1;
+    UPDATE Zona SET umbral_incidentes_activos = 0 WHERE id_zona = 1;
 
     INSERT INTO Incidente (fk_tipo_incidente_id, fk_gravedad_id, fk_estado_incidente_id, fk_zona_id, descripcion, prioridad)
-    VALUES (1, 3, v_pendiente, 1, 'P7 - umbral superado', 3)
+    VALUES (1, 3, v_pendiente, 1, 'P7 - umbral de zona superado', 3)
     RETURNING id_incidente INTO v_incidente;
 
     SELECT count(*) INTO v_n_asig FROM Asignacion WHERE fk_incidente_id = v_incidente;
@@ -370,17 +370,17 @@ BEGIN
     FROM Incidente i JOIN EstadoIncidente ei ON i.fk_estado_incidente_id = ei.id_estado_incidente
     WHERE i.id_incidente = v_incidente;
 
-    -- Restauramos el umbral ANTES de asertar, para no dejar el parámetro alterado si la prueba falla.
-    UPDATE ParametrosSistema SET numero = COALESCE(v_umbral_old, 50) WHERE nombre_parametro = 'UMBRAL_RECURSOS_ACTIVOS';
+    -- Restauramos el tope de la zona ANTES de asertar, para no dejarlo alterado si la prueba falla.
+    UPDATE Zona SET umbral_incidentes_activos = v_umbral_old WHERE id_zona = 1;
 
     IF v_n_asig <> 0 THEN
-        RAISE EXCEPTION 'FALLO R1 (umbral): con umbral 0 se asignaron % recursos (debían ser 0).', v_n_asig;
+        RAISE EXCEPTION 'FALLO R20 (umbral de zona): con tope 0 se asignaron % recursos (debían ser 0).', v_n_asig;
     END IF;
     IF v_estado_inc <> 'Pendiente' THEN
-        RAISE EXCEPTION 'FALLO R1 (umbral): el incidente no quedó Pendiente (quedó %).', v_estado_inc;
+        RAISE EXCEPTION 'FALLO R20 (umbral de zona): el incidente no quedó Pendiente (quedó %).', v_estado_inc;
     END IF;
 
-    RAISE NOTICE 'ÉXITO P7: R1 dejó el incidente en Pendiente al superarse el umbral de recursos activos.';
+    RAISE NOTICE 'ÉXITO P7: R20 dejó el incidente en Pendiente al superarse el tope de incidentes activos de la zona.';
 
     DELETE FROM Incidente WHERE id_incidente = v_incidente;
 END;

@@ -81,7 +81,8 @@ CREATE TABLE Zona (
     id_zona SERIAL PRIMARY KEY,
     nombre VARCHAR(100) NOT NULL UNIQUE,
     fk_nivel_riesgo_id INT NOT NULL,
-    CONSTRAINT fk_zona_nivel_riesgo FOREIGN KEY (fk_nivel_riesgo_id) 
+    umbral_incidentes_activos INT NOT NULL, -- Tope de incidentes en atención (En proceso/Escalado) que admite la zona antes de dejar los nuevos en 'Pendiente' (R20)
+    CONSTRAINT fk_zona_nivel_riesgo FOREIGN KEY (fk_nivel_riesgo_id)
         REFERENCES NivelRiesgo(id_nivel_riesgo) ON DELETE RESTRICT
 );
 
