@@ -1,5 +1,8 @@
 \echo '>>> 09 - REPORTE OPERATIVO'
 
+\pset border 2
+\pset linestyle unicode
+
 CREATE TEMP TABLE sim_mapa_cobertura (
     codigo TEXT PRIMARY KEY,
     patron TEXT NOT NULL
@@ -13,7 +16,7 @@ VALUES
     ('R4',  'R4 reasignacion por falla'),
     ('R5',  'R1/R5 cantidad por gravedad'),
     ('R7',  'R7 cierre automatico'),
-    ('R8',  'R8 recursos Ocupado'),
+    ('R8',  'R8 recursos En transito'),
     ('R9',  'R9 transicion invalida'),
     ('R10', 'R10 zona habilitada'),
     ('R11', 'R11 duplicados'),
@@ -21,7 +24,10 @@ VALUES
     ('R13', 'R12/R13 prioridad'),
     ('R14', 'R14 mejor recurso'),
     ('R15', 'R15 asignacion global'),
+    ('R16', 'R16 escalamiento por SLA'),
+    ('R17', 'R17 reactivacion temporal'),
     ('R18', 'R18 log de rebalanceo'),
+    ('R20', 'R20 capacidad por zona'),
     ('R21', 'R21 promocion confiable');
 
 UPDATE sim_cobertura c
@@ -42,6 +48,22 @@ SET estado = 'PASS',
     detalle = 'sp_AsignarRecurso instalado y disponible para asignacion diferida.'
 WHERE codigo = 'P1' AND objeto_instalado;
 
+UPDATE sim_cobertura c
+SET estado = r.estado,
+    detalle = r.detalle
+FROM (VALUES
+    ('P2', 'P2 incremento de gravedad'),
+    ('P4', 'P4 penalizacion proporcional')
+) AS m(codigo, prueba)
+CROSS JOIN LATERAL (
+    SELECT sr.estado, sr.detalle
+    FROM sim_resultado sr
+    WHERE sr.prueba = m.prueba
+    ORDER BY CASE sr.estado WHEN 'FAIL' THEN 1 WHEN 'PASS' THEN 2 ELSE 3 END, sr.orden
+    LIMIT 1
+) r
+WHERE c.codigo = m.codigo;
+
 UPDATE sim_cobertura
 SET estado = 'PASS',
     detalle = 'La vista de historial de triggers esta instalada y contiene evidencia.'
@@ -61,6 +83,17 @@ SELECT CASE
         THEN 'PASS CON BRECHAS CONOCIDAS'
     ELSE 'PASS COMPLETO'
 END AS veredicto;
+
+\echo ''
+\echo '--- TABLERO EJECUTIVO ---'
+SELECT
+    (SELECT count(*) FROM sim_resultado) AS pruebas_registradas,
+    (SELECT count(*) FROM sim_resultado WHERE estado = 'PASS') AS aprobadas,
+    (SELECT count(*) FROM sim_resultado WHERE estado = 'FAIL') AS fallos,
+    (SELECT count(*) FROM sim_resultado WHERE estado IN ('XFAIL', 'SKIP')) AS brechas_visibles,
+    (SELECT count(*) FROM sim_cobertura WHERE estado = 'PASS') AS capacidades_validadas,
+    (SELECT count(*) FROM Log WHERE operacion = 'DECISION') AS decisiones_automaticas,
+    (SELECT count(*) FROM sim_lote_20) AS incidentes_en_rafaga;
 
 \echo ''
 \echo '--- RESUMEN DE ASERCIONES ---'
@@ -152,6 +185,29 @@ ORDER BY intervenciones DESC, r.puntaje DESC, r.id_recurso
 LIMIT 10;
 
 \echo ''
+\echo '--- PENALIZACIONES Y DECISIONES AVANZADAS ---'
+SELECT
+    p.id_penalizacion,
+    p.fk_recurso_id AS recurso,
+    tp.nombre AS tipo,
+    COALESCE(p.puntaje, tp.puntaje) AS puntos,
+    p.motivo
+FROM Penalizacion p
+JOIN TipoPenalizacion tp ON tp.id_tipo_penalizacion = p.fk_tipo_penalizacion_id
+ORDER BY p.id_penalizacion;
+
+\echo ''
+\echo '--- DECISIONES AUTOMATICAS R1/R4/R7/R15/R20/R21/P4 ---'
+SELECT
+    trigger_disparador AS regla,
+    tablaAfectada AS entidad,
+    idTablaAfectada AS id_entidad,
+    detalle->>'motivo' AS motivo
+FROM Log
+WHERE operacion = 'DECISION'
+ORDER BY timestamp, id_log;
+
+\echo ''
 \echo '--- AUDITORIA DEL LOTE ---'
 SELECT
     COALESCE(trigger_disparador, '(manual)') AS origen,
@@ -178,4 +234,4 @@ ORDER BY orden;
 \echo ''
 \echo '--- NOTA DE CONCURRENCIA ---'
 SELECT
-    'La suite prueba una rafaga de 20 filas en una sentencia. El trigger validador usa locks FOR UPDATE sobre recursos, pero no se ejecutan dos sesiones concurrentes.' AS diagnostico;
+    'La suite prueba una rafaga de 20 filas en una sentencia. La validacion usa locks FOR UPDATE sobre recursos, pero no se ejecutan dos sesiones concurrentes.' AS diagnostico;

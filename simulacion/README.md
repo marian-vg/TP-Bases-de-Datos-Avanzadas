@@ -35,7 +35,7 @@ psql -v ON_ERROR_STOP=1 -h localhost -p 5433 -U postgres -d smart_city -f simula
 
 El runner abre una transaccion, toma snapshots temporales, ejecuta todos los escenarios,
 imprime el reporte y termina con `ROLLBACK`. Ningun incidente, recurso, parametro,
-puntaje, permiso de zona, log ni avance de secuencia generado por la simulacion queda
+umbral por zona, puntaje, permiso de zona, log ni avance de secuencia generado por la simulacion queda
 persistido. Las secuencias se restauran explicitamente porque PostgreSQL no las revierte
 automaticamente con `ROLLBACK`.
 
@@ -47,10 +47,11 @@ ejecutarse sobre una base compartida con usuarios activos.
 El flujo funcional evaluado es:
 
 ```text
-Sensor -> Evento -> Incidente -> Asignacion -> Intervencion -> Resolucion
-                         |              |
+Sensor -> Evento -> Incidente -> Asignacion -> En transito -> Ocupado -> Resolucion
+                         |              |             |
+                         |              |             +-> demora -> penalizacion proporcional
                          |              +-> falla -> penalizacion -> reasignacion
-                         +-> prioridad, capacidad, SLA y rebalanceo
+                         +-> prioridad, capacidad por zona, SLA y rebalanceo
 ```
 
 `lib/harness.sql` crea tablas y funciones temporales para resultados, metricas, cobertura,
@@ -66,8 +67,8 @@ incluyen desde `00_run_all.sql`; el reporte se imprime antes del rollback.
 | `03_ciclo_vida.sql` | Exito, cierre, liberacion, falla, penalizacion y reasignacion |
 | `04_validaciones.sql` | Disponibilidad, tipo, zona, estados y duplicados |
 | `05_sensores_iot.sql` | Confianza, promocion, rechazo, ambiguedad y duplicados IoT |
-| `06_saturacion_rebalanceo.sql` | Agotamiento local, rebalanceo y umbral de capacidad |
-| `07_brechas_conocidas.sql` | Capacidades requeridas pero ausentes o no cargadas |
+| `06_saturacion_rebalanceo.sql` | Agotamiento local, recurso externo, ciclo completo y capacidad por zona |
+| `07_capacidades_avanzadas.sql` | SLA, escalamiento, reactivacion, arribo, penalizacion proporcional y brechas |
 | `08_simulacion_20_incidentes.sql` | Rafaga deterministica de veinte incidentes |
 | `09_reporte_operativo.sql` | Veredicto, cobertura, SLA, ranking, auditoria y brechas |
 
@@ -84,29 +85,26 @@ Hallazgos principales:
 
 - Las simulaciones anteriores borraban globalmente datos, usaban IDs magicos y no fallaban
   cuando el resultado era incorrecto.
-- Algunas esperaban el estado `En transito`, aunque el motor modular marca el recurso
-  directamente como `Ocupado`.
+- El motor integrado representa el ciclo operativo completo:
+  `Disponible -> En transito -> Ocupado -> Disponible`.
 - Tener un archivo SQL no implica que la migracion canonica lo instale.
-- `reglas-temporales.sql` contiene R16/R17, pero la migracion actual no lo incluye.
-- `reglas-auditoriaYcontrol.sql` contiene R20, pero tampoco se incluye.
-- Existe P1 y se carga. P2 existe en un archivo no cargado. P3, P4 y P5 no existen.
+- `reglas-temporales.sql` se carga y permite validar R16/P2 y R17.
+- R20 controla la capacidad mediante un umbral propio de cada zona.
+- P4 calcula penalizaciones proporcionales por exceso sobre el SLA.
+- P1 se conserva como procedimiento adicional. P3 y P5 no existen.
 - R6 no esta implementada.
-- La penalizacion automatica por demora y el bloqueo por acumulacion de penalizaciones no
-  estan implementados en los modulos cargados.
+- El bloqueo por acumulacion de penalizaciones no esta implementado en los modulos cargados.
 - Algunos comentarios y tests todavia describen R12, R13 y R15 como pendientes, aunque
   actualmente poseen implementacion modular.
 
 ## Estado esperado de cobertura
 
 La matriz final se calcula contra los objetos realmente instalados y la evidencia de la
-corrida. En la migracion actual se esperan brechas visibles para:
+corrida. La suite demuestra R16, R17, R20, P2 y P4 de forma funcional. En la migracion
+actual se esperan brechas visibles solo para:
 
 - R6: generacion de incidentes relacionados.
-- R16/R17: codigo existente pero no cargado.
-- R20: codigo existente pero no cargado.
-- P2: codigo existente pero no cargado.
-- P3/P4/P5: procedimientos ausentes.
-- Penalizacion automatica por demora.
+- P3/P5: procedimientos ausentes.
 - Bloqueo automatico por penalizaciones acumuladas.
 
 Estas brechas se reportan como `XFAIL`; no se implementan dentro de la simulacion porque
@@ -117,11 +115,12 @@ eso produciria una demostracion engañosa del motor.
 Para una defensa oral, leer el reporte en este orden:
 
 1. Veredicto general y resumen de aserciones.
-2. Matriz R1-R21 / P1-P5.
-3. Metricas del lote de veinte incidentes.
-4. Estado final, SLA y ranking de recursos.
-5. Auditoria de triggers.
-6. Brechas conocidas.
+2. Tablero ejecutivo con pruebas, capacidades, decisiones y lote obligatorio.
+3. Matriz R1-R21 / P1-P5.
+4. Metricas del lote de veinte incidentes.
+5. Estado final, SLA, penalizaciones y ranking de recursos.
+6. Decisiones automaticas y auditoria de triggers.
+7. Brechas conocidas.
 
 Un resultado `PASS CON BRECHAS CONOCIDAS` significa que la suite se ejecuto correctamente,
 las capacidades implementadas respondieron como se esperaba y las ausencias conocidas
