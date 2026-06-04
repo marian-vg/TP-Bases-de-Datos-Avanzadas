@@ -25,10 +25,14 @@ if ($LASTEXITCODE -ne 0 -or $branch -ne 'dev/simulacion') {
     throw "Atomic feature commits are allowed only on dev/simulacion. Current branch: '$branch'."
 }
 
-$repoRoot = (& git rev-parse --show-toplevel).Trim()
+$repoRoot = [System.IO.Path]::GetFullPath((& git rev-parse --show-toplevel).Trim())
 if ($LASTEXITCODE -ne 0) {
     throw 'Unable to resolve the repository root.'
 }
+$repoRootPrefix = $repoRoot.TrimEnd(
+    [System.IO.Path]::DirectorySeparatorChar,
+    [System.IO.Path]::AltDirectorySeparatorChar
+) + [System.IO.Path]::DirectorySeparatorChar
 
 $alreadyStaged = @(& git diff --cached --name-only)
 if ($LASTEXITCODE -ne 0) {
@@ -41,7 +45,7 @@ if ($alreadyStaged.Count -gt 0) {
 $resolvedPaths = foreach ($path in $Paths) {
     $candidate = Join-Path $repoRoot $path
     $resolved = [System.IO.Path]::GetFullPath($candidate)
-    if (-not $resolved.StartsWith($repoRoot, [System.StringComparison]::OrdinalIgnoreCase)) {
+    if (-not $resolved.StartsWith($repoRootPrefix, [System.StringComparison]::OrdinalIgnoreCase)) {
         throw "Path escapes repository root: $path"
     }
     if (-not (Test-Path -LiteralPath $resolved)) {
