@@ -1,125 +1,112 @@
 -- =============================================================================
--- SIMULACION 01 - CASO BASICO
+-- SIMULACION 01 - CASO BASICO: ASIGNACION AUTOMATICA
 -- =============================================================================
--- Que demuestra (casos basicos - asignacion):
---   Al insertar un incidente en "Pendiente", los triggers deben:
---     1) crear una asignacion automatica
---     2) cambiar el incidente a "En proceso"
---     3) cambiar el recurso a "En transito" (hasta registrar la llegada)
---   Ver tambien: 02_caso_basico_cambio_estados.sql
---
--- Como correrlo (desde la raiz del proyecto, con la base ya cargada):
---   psql -h localhost -p 5433 -U postgres -d smart_city
---   \i simulacion/01_caso_basico_asignacion_automatica.sql
---
--- O pegar este archivo en pgAdmin / DBeaver y ejecutarlo entero.
+-- Demuestra que al insertar un incidente Pendiente, los triggers:
+--   1) crean una asignación automática;
+--   2) pasan el incidente a "En proceso";
+--   3) marcan el recurso asignado como "Ocupado".
 -- =============================================================================
 
+\set ON_ERROR_STOP on
+BEGIN;
 
--- -----------------------------------------------------------------------------
--- PASO 0: dejar el entorno limpio para la prueba
--- -----------------------------------------------------------------------------
 DELETE FROM Asignacion;
 DELETE FROM Penalizacion;
 DELETE FROM Incidente;
 DELETE FROM Evento;
+UPDATE Recurso
+SET fk_estado_recurso_id = (SELECT id_estado_recurso FROM EstadoRecurso WHERE nombre = 'Disponible')
+WHERE fk_estado_recurso_id <> (SELECT id_estado_recurso FROM EstadoRecurso WHERE nombre = 'Disponible');
 DELETE FROM Log;
 
-UPDATE Recurso
-SET fk_estado_recurso_id = 1
-WHERE fk_estado_recurso_id <> 1;
-
-
--- -----------------------------------------------------------------------------
--- PASO 1: consultas ANTES de simular (solo lectura)
--- -----------------------------------------------------------------------------
--- Recursos disponibles en zona 1 que sirven para "Emergencia medica" (tipo 4):
-
-SELECT
-    r.id_recurso,
-    tr.nombre AS tipo_recurso,
-    er.nombre AS estado
+\echo 'SIM-01: recursos candidatos antes de insertar el incidente'
+SELECT r.id_recurso, tr.nombre AS tipo_recurso, er.nombre AS estado
 FROM Recurso r
-JOIN EstadoRecurso er ON r.fk_estado_recurso_id = er.id_estado_recurso
-JOIN TipoRecurso tr ON r.fk_tipo_recurso_id = tr.id_tipo_recurso
-JOIN ZonaRecurso zr ON zr.id_recurso = r.id_recurso AND zr.id_zona = 1
-JOIN TipoIncidenteTipoRecurso titr
-  ON titr.fk_tipo_recurso_id = r.fk_tipo_recurso_id
- AND titr.fk_tipo_incidente_id = 4
+JOIN EstadoRecurso er ON er.id_estado_recurso = r.fk_estado_recurso_id
+JOIN TipoRecurso tr ON tr.id_tipo_recurso = r.fk_tipo_recurso_id
+JOIN ZonaRecurso zr ON zr.id_recurso = r.id_recurso
+JOIN TipoIncidenteTipoRecurso titr ON titr.fk_tipo_recurso_id = r.fk_tipo_recurso_id
+JOIN TipoIncidente ti ON ti.id_tipo_incidente = titr.fk_tipo_incidente_id
+JOIN Zona z ON z.id_zona = zr.id_zona
 WHERE er.nombre = 'Disponible'
-ORDER BY r.id_recurso;
+  AND ti.nombre = 'Emergencia médica'
+  AND z.nombre = 'Centro'
+ORDER BY r.id_recurso
+LIMIT 10;
 
--- Incidentes activos antes de la simulacion (deberia dar 0):
+DO $$
+DECLARE
+    v_incidente INT;
+    v_asignaciones INT;
+    v_ocupados INT;
+    v_estado_incidente TEXT;
+BEGIN
+    INSERT INTO Incidente (
+        fk_tipo_incidente_id,
+        fk_gravedad_id,
+        fk_estado_incidente_id,
+        fk_zona_id,
+        descripcion,
+        prioridad
+    )
+    SELECT ti.id_tipo_incidente, g.id_gravedad, ei.id_estado_incidente,
+           z.id_zona, 'SIM-01 emergencia medica', 1
+    FROM TipoIncidente ti, Gravedad g, EstadoIncidente ei, Zona z
+    WHERE ti.nombre = 'Emergencia médica'
+      AND g.nombre = 'Baja'
+      AND ei.nombre = 'Pendiente'
+      AND z.nombre = 'Centro'
+    RETURNING id_incidente INTO v_incidente;
 
-SELECT COUNT(*) AS incidentes_activos_antes
-FROM vIncidentesActivos;
+    SELECT COUNT(*) INTO v_asignaciones
+    FROM Asignacion
+    WHERE fk_incidente_id = v_incidente
+      AND timestamp_finalizacion IS NULL;
 
+    IF v_asignaciones <> 1 THEN
+        RAISE EXCEPTION 'SIM-01 fallo R1/R5: se esperaba 1 asignación abierta, se obtuvieron %.', v_asignaciones;
+    END IF;
 
--- -----------------------------------------------------------------------------
--- PASO 2: simular el evento (INSERT del incidente)
--- -----------------------------------------------------------------------------
--- Valores del dataset:
---   tipo 4  = Emergencia medica
---   gravedad 1 = Baja (pide 1 solo recurso)
---   estado 1 = Pendiente
---   zona 1
--- La descripcion 'SIM-01' nos sirve despues para buscar este incidente.
+    SELECT ei.nombre INTO v_estado_incidente
+    FROM Incidente i
+    JOIN EstadoIncidente ei ON ei.id_estado_incidente = i.fk_estado_incidente_id
+    WHERE i.id_incidente = v_incidente;
 
-INSERT INTO Incidente (
-    fk_tipo_incidente_id,
-    fk_gravedad_id,
-    fk_estado_incidente_id,
-    fk_zona_id,
-    descripcion,
-    prioridad
-)
-VALUES (
-    4,
-    1,
-    1,
-    1,
-    'SIM-01 emergencia medica',
-    1
-);
+    IF v_estado_incidente <> 'En proceso' THEN
+        RAISE EXCEPTION 'SIM-01 fallo R2: el incidente debía quedar En proceso, quedó %.', v_estado_incidente;
+    END IF;
 
+    SELECT COUNT(*) INTO v_ocupados
+    FROM Asignacion a
+    JOIN Recurso r ON r.id_recurso = a.fk_recurso_id
+    JOIN EstadoRecurso er ON er.id_estado_recurso = r.fk_estado_recurso_id
+    WHERE a.fk_incidente_id = v_incidente
+      AND er.nombre = 'Ocupado';
 
--- -----------------------------------------------------------------------------
--- PASO 3: consultas DESPUES (verificar que los triggers actuaron)
--- -----------------------------------------------------------------------------
+    IF v_ocupados <> 1 THEN
+        RAISE EXCEPTION 'SIM-01 fallo R8: el recurso asignado debía quedar Ocupado, ocupados %.', v_ocupados;
+    END IF;
 
--- 3a) El incidente deberia estar "En proceso":
+    RAISE NOTICE 'SIM-01 OK: incidente %, 1 asignación automática, estado En proceso y recurso Ocupado.', v_incidente;
+END;
+$$;
 
-SELECT
-    i.id_incidente,
-    ti.nombre AS tipo_incidente,
-    g.nombre AS gravedad,
-    ei.nombre AS estado_incidente,
-    z.nombre AS zona
+\echo 'SIM-01: evidencia final'
+SELECT i.id_incidente, ti.nombre AS tipo_incidente, g.nombre AS gravedad,
+       ei.nombre AS estado_incidente, z.nombre AS zona, i.descripcion
 FROM Incidente i
-JOIN TipoIncidente ti ON i.fk_tipo_incidente_id = ti.id_tipo_incidente
-JOIN Gravedad g ON i.fk_gravedad_id = g.id_gravedad
-JOIN EstadoIncidente ei ON i.fk_estado_incidente_id = ei.id_estado_incidente
-JOIN Zona z ON i.fk_zona_id = z.id_zona
+JOIN TipoIncidente ti ON ti.id_tipo_incidente = i.fk_tipo_incidente_id
+JOIN Gravedad g ON g.id_gravedad = i.fk_gravedad_id
+JOIN EstadoIncidente ei ON ei.id_estado_incidente = i.fk_estado_incidente_id
+JOIN Zona z ON z.id_zona = i.fk_zona_id
 WHERE i.descripcion = 'SIM-01 emergencia medica';
 
-
--- 3b) Deberia existir 1 asignacion y el recurso en "En transito":
-
-SELECT
-    a.id_asignacion,
-    a.fk_recurso_id,
-    tr.nombre AS tipo_recurso,
-    er.nombre AS estado_recurso
+SELECT a.id_asignacion, a.fk_recurso_id, tr.nombre AS tipo_recurso, er.nombre AS estado_recurso
 FROM Asignacion a
-JOIN Incidente i ON a.fk_incidente_id = i.id_incidente
-JOIN Recurso r ON a.fk_recurso_id = r.id_recurso
-JOIN TipoRecurso tr ON r.fk_tipo_recurso_id = tr.id_tipo_recurso
-JOIN EstadoRecurso er ON r.fk_estado_recurso_id = er.id_estado_recurso
+JOIN Incidente i ON i.id_incidente = a.fk_incidente_id
+JOIN Recurso r ON r.id_recurso = a.fk_recurso_id
+JOIN TipoRecurso tr ON tr.id_tipo_recurso = r.fk_tipo_recurso_id
+JOIN EstadoRecurso er ON er.id_estado_recurso = r.fk_estado_recurso_id
 WHERE i.descripcion = 'SIM-01 emergencia medica';
 
-
--- 3c) Vista de incidentes activos del TP:
-
-SELECT *
-FROM vIncidentesActivos
-WHERE descripcion = 'SIM-01 emergencia medica';
+ROLLBACK;

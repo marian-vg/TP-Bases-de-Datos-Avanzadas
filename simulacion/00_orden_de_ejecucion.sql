@@ -1,10 +1,20 @@
 -- =============================================================================
 -- SIMULACIONES - ORDEN SUGERIDO
 -- =============================================================================
--- Requisito: base smart_city con migrate.sql (tablas, datos, vistas, triggers).
+-- Requisito: base smart_city inicializada con migrate.sql o Docker.
 --
--- Ejecutar cada archivo por separado, en este orden:
+-- Objetivo: demostrar los casos de prueba pedidos por la consigna del TP.
+-- Estos scripts son AUTO-CONTENIDOS, TRANSACCIONALES y AUTO-VERIFICABLES:
+--   - hacen su preparación dentro de BEGIN;
+--   - validan resultados con RAISE EXCEPTION;
+--   - terminan con ROLLBACK para no ensuciar la base;
+--   - si algo falla, psql corta por ON_ERROR_STOP.
 --
+-- Ejecutar cada archivo por separado:
+--   psql -h localhost -p 5433 -U postgres -d smart_city -v ON_ERROR_STOP=1 \
+--        -f simulacion/01_caso_basico_asignacion_automatica.sql
+--
+-- Orden sugerido:
 --   01_caso_basico_asignacion_automatica.sql
 --   02_caso_basico_cambio_estados.sql
 --   03_caso_intermedio_falta_recursos.sql
@@ -14,6 +24,8 @@
 --   07_caso_avanzado_bloqueo_recursos.sql
 --   08_simulacion_20_incidentes.sql
 --
--- Cada script limpia las tablas operativas al inicio (no toca catalogos ni recursos base).
--- Conexion Docker: psql -h localhost -p 5433 -U postgres -d smart_city
+-- NOTA IMPORTANTE:
+--   06 y 07 quedan preparados para validar reglas activas pendientes de la base:
+--   penalización por demora y bloqueo por acumulación de penalizaciones. Hasta que
+--   esas reglas estén implementadas, esos scripts deben fallar y sirven como guía.
 -- =============================================================================
