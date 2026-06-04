@@ -161,6 +161,28 @@
     .commit { display: grid; grid-template-columns: 105px 1fr; gap: 1.2rem; }
     .hash { color: var(--accent); font: 500 .78rem "DM Mono", monospace; }
     .commit h3 { margin: 0 0 .4rem; }
+    .commit ul { color: var(--muted); }
+    .issue {
+      display: grid;
+      grid-template-columns: 74px minmax(180px, .7fr) minmax(260px, 1.4fr) minmax(260px, 1.4fr);
+      gap: 1rem;
+      padding: 1.25rem 0;
+      border-top: 1px solid var(--line);
+    }
+    .issue:last-child { border-bottom: 1px solid var(--line); }
+    .issue-id { color: var(--accent); font: 500 .72rem "DM Mono", monospace; }
+    .issue h3 { font-size: .9rem; }
+    .issue p { margin: 0; color: var(--muted); font-size: .86rem; }
+    .path { color: var(--green); font: 400 .72rem/1.55 "DM Mono", monospace; overflow-wrap: anywhere; }
+    .file-map { display: grid; gap: 0; border-top: 1px solid var(--line); }
+    .file-row {
+      display: grid;
+      grid-template-columns: minmax(220px, .8fr) minmax(300px, 1.5fr);
+      gap: 1rem;
+      padding: 1rem 0;
+      border-bottom: 1px solid var(--line);
+    }
+    .file-row p { margin: 0; color: var(--muted); }
     .callout { margin-top: 2rem; padding: 1.4rem; border-left: 3px solid var(--accent); background: var(--soft); }
     .callout p { margin: 0; color: var(--muted); }
     .hidden { display: none !important; }
@@ -174,7 +196,7 @@
     @media (max-width: 680px) {
       .grid-2, .grid-3, .merge { grid-template-columns: 1fr; }
       .merge-center { min-height: 50px; }
-      .commit { grid-template-columns: 1fr; }
+      .commit, .issue, .file-row { grid-template-columns: 1fr; }
       h1 { font-size: clamp(3.4rem, 19vw, 6rem); }
     }
     @media print {
@@ -204,7 +226,7 @@
       <p class="lede">Este documento reemplaza el dossier anterior. Explica qué se conservó de la primera simulación, qué motor se incorporó desde <span class="mono">dev/create-triggers</span>, cómo se evitó un merge destructivo y qué evidencia produce hoy la rama <span class="mono">dev/simulacion</span>.</p>
     </div>
     <aside class="facts">
-      <div class="fact"><b>12</b><span>commits funcionales documentados, excluyendo la skill de commits.</span></div>
+      <div class="fact"><b>13</b><span>commits funcionales y documentales trazados, excluyendo la skill de commits.</span></div>
       <div class="fact"><b>9</b><span>módulos ejecutados por un único runner transaccional.</span></div>
       <div class="fact"><b>20</b><span>incidentes creados en una ráfaga determinística obligatoria.</span></div>
       <div class="fact"><b>1</b><span>verdad operativa: la migración canónica y el motor integrado.</span></div>
@@ -218,10 +240,12 @@
       <a class="nav-link" href="#veredicto"><span>01</span><span><strong>Veredicto final</strong>qué quedó realmente</span></a>
       <a class="nav-link" href="#merge"><span>02</span><span><strong>Cómo se integró</strong>lo mejor de cada rama</span></a>
       <a class="nav-link" href="#arquitectura"><span>03</span><span><strong>Arquitectura final</strong>motor, suite y reporte</span></a>
-      <a class="nav-link" href="#escenarios"><span>04</span><span><strong>Mega simulación</strong>escenario por escenario</span></a>
-      <a class="nav-link" href="#cobertura"><span>05</span><span><strong>Cobertura honesta</strong>cumplimientos y brechas</span></a>
-      <a class="nav-link" href="#commits"><span>06</span><span><strong>Historia por commit</strong>evolución completa</span></a>
-      <a class="nav-link" href="#auditoria"><span>07</span><span><strong>Auditoría final</strong>correcciones de coherencia</span></a>
+      <a class="nav-link" href="#inventario"><span>04</span><span><strong>Inventario final</strong>qué implementa cada archivo</span></a>
+      <a class="nav-link" href="#escenarios"><span>05</span><span><strong>Mega simulación</strong>escenario por escenario</span></a>
+      <a class="nav-link" href="#errores"><span>06</span><span><strong>Errores encontrados</strong>causa, riesgo y solución</span></a>
+      <a class="nav-link" href="#cobertura"><span>07</span><span><strong>Cobertura honesta</strong>cumplimientos y brechas</span></a>
+      <a class="nav-link" href="#commits"><span>08</span><span><strong>Historia por commit</strong>evolución completa</span></a>
+      <a class="nav-link" href="#auditoria"><span>09</span><span><strong>Auditoría final</strong>correcciones de coherencia</span></a>
     </nav>
 
     <main>
@@ -282,6 +306,24 @@
         </div>
       </section>
 
+      <section class="chapter searchable" id="inventario" data-search="inventario archivos implementacion runner harness escenarios reporte motor tests">
+        <div class="kicker">Mapa de implementación</div>
+        <h2>Qué aporta realmente cada parte de la rama.</h2>
+        <p class="intro">Este inventario permite leer la rama sin recorrer todos los diffs. Separa el motor que toma decisiones, la suite que lo pone a prueba y la documentación que explica la evidencia.</p>
+        <div class="file-map">
+          <div class="file-row"><span class="path">migrate.sql · docker/init-db.sh</span><p>Son las entradas canónicas del sistema. Fueron alineadas para cargar las reglas temporales y el mismo conjunto de módulos tanto manualmente como dentro de Docker.</p></div>
+          <div class="file-row"><span class="path">database/create-tables.sql · create-views.sql</span><p>Definen la capacidad por zona y las vistas adaptadas al motor integrado. La simulación consulta estos objetos, pero no crea versiones falsas para aprobar.</p></div>
+          <div class="file-row"><span class="path">database/triggers/reglas-automatizacion.sql</span><p>Implementa la asignación automática, el ciclo de estados, el cierre, las fallas, el rebalanceo, la promoción de eventos y las decisiones asociadas.</p></div>
+          <div class="file-row"><span class="path">database/triggers/reglas-inteligencia.sql</span><p>Calcula prioridad, cantidad de recursos, selección del mejor candidato y compatibilidad. Es la base de las pruebas R5, R12, R13, R14 y R15.</p></div>
+          <div class="file-row"><span class="path">database/triggers/reglas-temporales.sql</span><p>Expone escalamiento por SLA, reactivación y penalización proporcional. Funciona al invocarse, aunque no existe un scheduler integrado.</p></div>
+          <div class="file-row"><span class="path">simulacion/00_run_all.sql · lib/harness.sql</span><p>Abren la transacción, toman snapshots, acumulan resultados y métricas, ejecutan todos los módulos, restauran secuencias y revierten la corrida.</p></div>
+          <div class="file-row"><span class="path">simulacion/01…08_*.sql</span><p>Preparan escenarios reproducibles y verifican comportamientos reales con PASS, FAIL, XFAIL, XPASS, SKIP e INFO. Cada escenario reinicia el estado operativo dentro de la misma transacción.</p></div>
+          <div class="file-row"><span class="path">simulacion/09_reporte_operativo.sql</span><p>Convierte resultados y métricas en un veredicto legible: cobertura R1–R21/P1–P5, lote de veinte, SLA, recursos, penalizaciones, decisiones y brechas.</p></div>
+          <div class="file-row"><span class="path">tests/test-*.sql</span><p>Los tests heredados fueron alineados con los nombres de triggers, estados y capacidad del motor final para que no contradigan la simulación.</p></div>
+          <div class="file-row"><span class="path">simulacion/README.md · documentacion/*.html</span><p>Explican ejecución, arquitectura, cobertura honesta, integración entre ramas y esta bitácora completa de decisiones y errores.</p></div>
+        </div>
+      </section>
+
       <section class="chapter searchable" id="escenarios" data-search="escenarios mega simulacion preflight iot rebalanceo sla veinte">
         <div class="kicker">Mega simulación</div>
         <h2>Nueve módulos, una narrativa operativa.</h2>
@@ -303,6 +345,27 @@
         </div>
       </section>
 
+      <section class="chapter searchable" id="errores" data-search="errores hallazgos problemas causa riesgo solucion ids mágicos secuencias estados cobertura">
+        <div class="kicker">Bitácora de hallazgos</div>
+        <h2>Errores encontrados durante el trabajo y cómo se resolvieron.</h2>
+        <p class="intro">Esta lista incluye tanto defectos de las simulaciones originales como inconsistencias descubiertas al integrar el motor de la otra rama. “Corregido” significa que la rama ya lo resuelve; “visible” significa que pertenece al motor y se documenta sin fingir una implementación.</p>
+        <div class="issue"><span class="issue-id">H-01</span><h3>Simulaciones destructivas</h3><p><strong>Problema y riesgo.</strong> Las demos originales borraban datos operativos globalmente. Ejecutarlas podía alterar una base compartida y no dejaba una forma confiable de comparar antes/después.</p><p><strong>Solución.</strong> Se creó un runner con transacción global, snapshots, resets internos y <span class="mono">ROLLBACK</span> obligatorio.</p></div>
+        <div class="issue"><span class="issue-id">H-02</span><h3>Sin aserciones automáticas</h3><p><strong>Problema y riesgo.</strong> Los scripts mostraban consultas, pero una salida incorrecta podía parecer exitosa. No existía veredicto ni código de salida útil.</p><p><strong>Solución.</strong> El harness registra PASS/FAIL/XFAIL/XPASS/SKIP/INFO; solo un fallo inesperado devuelve código no exitoso y el reporte se imprime antes del rollback.</p></div>
+        <div class="issue"><span class="issue-id">H-03</span><h3>IDs mágicos</h3><p><strong>Problema y riesgo.</strong> Varios escenarios asumían IDs concretos. El caso más persistente asignaba gravedades como <span class="mono">1..5</span>; un dataset distinto rompía o medía otra cosa.</p><p><strong>Solución.</strong> Se resolvieron catálogos por nombre o relaciones. El lote de veinte obtiene las gravedades existentes dinámicamente.</p></div>
+        <div class="issue"><span class="issue-id">H-04</span><h3>Candidatos no disponibles</h3><p><strong>Problema y riesgo.</strong> Los escenarios de inteligencia y validación podían elegir como candidato un recurso ocupado o fuera de servicio y atribuir el resultado a otra regla.</p><p><strong>Solución.</strong> Las búsquedas ahora exigen estado <span class="mono">Disponible</span>, tipo compatible y zona habilitada antes de ejecutar la prueba.</p></div>
+        <div class="issue"><span class="issue-id">H-05</span><h3>Estados contradictorios</h3><p><strong>Problema y riesgo.</strong> Tests y simulaciones esperaban <span class="mono">Ocupado</span> apenas se asignaba un recurso, aunque el motor integrado usa <span class="mono">En tránsito</span> hasta registrar el arribo.</p><p><strong>Solución.</strong> Se alinearon escenarios y tests con el ciclo real: Disponible → En tránsito → Ocupado → Disponible.</p></div>
+        <div class="issue"><span class="issue-id">H-06</span><h3>Umbral obsoleto</h3><p><strong>Problema y riesgo.</strong> Un test seguía modificando <span class="mono">UMBRAL_RECURSOS_ACTIVOS</span>, parámetro eliminado al adoptar capacidad configurable por zona.</p><p><strong>Solución.</strong> El test y la simulación ahora modifican temporalmente <span class="mono">Zona.umbral_incidentes_activos</span> y comprueban R20 por zona.</p></div>
+        <div class="issue"><span class="issue-id">H-07</span><h3>Triggers con nombres viejos</h3><p><strong>Problema y riesgo.</strong> Los tests intentaban desactivar triggers que ya no existen, por lo que podían fallar antes de probar la validación buscada.</p><p><strong>Solución.</strong> Se actualizaron los nombres al conjunto instalado: asignación automática, asignación aplicada y asignación finalizada.</p></div>
+        <div class="issue"><span class="issue-id">H-08</span><h3>Rollback incompleto</h3><p><strong>Problema y riesgo.</strong> PostgreSQL no revierte secuencias con <span class="mono">ROLLBACK</span>. La suite no persistía filas, pero sí avanzaba IDs y dejaba huella.</p><p><strong>Solución.</strong> El harness captura <span class="mono">last_value/is_called</span> de cada secuencia y las restaura explícitamente antes del rollback.</p></div>
+        <div class="issue"><span class="issue-id">H-09</span><h3>P1 aprobado por presencia</h3><p><strong>Problema y riesgo.</strong> El reporte marcaba P1 como PASS solo porque el procedimiento existía; eso no demostraba que pudiera recuperar un incidente pendiente.</p><p><strong>Solución.</strong> Se agregó una prueba funcional: fuerza capacidad agotada, crea el pendiente, restablece capacidad, invoca P1 y verifica asignación y estado.</p></div>
+        <div class="issue"><span class="issue-id">H-10</span><h3>R15 incompleta en la prueba</h3><p><strong>Problema y riesgo.</strong> Ver una asignación externa no alcanzaba para probar rebalanceo completo: podía faltar compatibilidad, habilitación de zona, log o cierre del ciclo.</p><p><strong>Solución.</strong> El escenario valida origen externo, compatibilidad, permiso agregado, decisión registrada y liberación final del recurso.</p></div>
+        <div class="issue"><span class="issue-id">H-11</span><h3>Cobertura sobredeclarada</h3><p><strong>Problema y riesgo.</strong> R18, R19 y R20 aparecían como completas por tener logs, vista o control de capacidad, aunque no cumplían literalmente toda la consigna.</p><p><strong>Solución.</strong> Se cambiaron a XFAIL parciales: no se registra cada acción/regla, no se registra cada ejecución de trigger y falta el estado literal <span class="mono">En espera</span>.</p></div>
+        <div class="issue"><span class="issue-id">H-12</span><h3>Archivo versus instalación</h3><p><strong>Problema y riesgo.</strong> La existencia de SQL para reglas temporales o auditoría podía confundirse con objetos realmente cargados por la migración.</p><p><strong>Solución.</strong> Preflight y cobertura consultan el catálogo de PostgreSQL y comparan objeto esperado con objeto instalado; migración y Docker quedaron alineados.</p></div>
+        <div class="issue"><span class="issue-id">H-13</span><h3>Reporte con datos ya reseteados</h3><p><strong>Problema y riesgo.</strong> Algunos títulos sugerían que el reporte acumulaba decisiones de todos los escenarios, aunque cada módulo limpia el estado operativo.</p><p><strong>Solución.</strong> Los títulos aclaran que penalizaciones y decisiones avanzadas observadas pertenecen al lote final; las aserciones sí permanecen acumuladas.</p></div>
+        <div class="issue"><span class="issue-id">H-14</span><h3>Comentario funcional falso</h3><p><strong>Problema y riesgo.</strong> P1 afirmaba realizar rebalanceo geográfico por sí mismo, cuando en realidad asigna recursos que ya fueron habilitados para la zona.</p><p><strong>Solución.</strong> Se corrigió el comentario para separar responsabilidades y evitar una explicación engañosa durante la defensa.</p></div>
+        <div class="issue"><span class="issue-id">H-15</span><h3>Brechas reales del motor</h3><p><strong>Problema y riesgo.</strong> R6, P3, P5, el bloqueo por penalizaciones y el scheduler de R16/R17 no están implementados. Agregarlos dentro de la simulación falsearía el motor.</p><p><strong>Tratamiento.</strong> Permanecen visibles como XFAIL o dependencia externa. La rama demuestra la ausencia y explica exactamente su alcance.</p></div>
+      </section>
+
       <section class="chapter searchable" id="cobertura" data-search="cobertura brechas r18 r19 r20 p3 p5 r6">
         <div class="kicker">Lectura honesta</div>
         <h2>Lo implementado se demuestra. Lo parcial se marca.</h2>
@@ -319,18 +382,19 @@
         <h2>Cómo evolucionó la rama.</h2>
         <p class="intro">La lista conserva únicamente los commits funcionales y documentales relevantes para el TP. El dossier HTML anterior fue útil como primera fotografía, pero quedó reemplazado porque describía un motor previo a la integración.</p>
         <div class="commit-list">
-          <article class="commit"><span class="hash">80f2232</span><div><h3>Harness transaccional</h3><p>Creó el runner único, resultados temporales, snapshots y rollback global.</p></div></article>
-          <article class="commit"><span class="hash">58fec2a</span><div><h3>Reconstrucción de escenarios</h3><p>Reemplazó demos manuales por módulos verificables de asignación, ciclo, validaciones, IoT y saturación.</p></div></article>
-          <article class="commit"><span class="hash">13e43dd</span><div><h3>Ráfaga de veinte</h3><p>Convirtió el requisito obligatorio en una carga reproducible con fallas inducidas y métricas.</p></div></article>
-          <article class="commit"><span class="hash">613322e</span><div><h3>Reporte operativo</h3><p>Agregó veredicto, matriz de cobertura, SLA, ranking y auditoría.</p></div></article>
-          <article class="commit"><span class="hash">64dad1f</span><div><h3>Validaciones de tipo y zona</h3><p>Cerró dos huecos que podían permitir falsos positivos en integridad.</p></div></article>
-          <article class="commit"><span class="hash">019c43c</span><div><h3>Guía de ejecución</h3><p>Documentó arquitectura, estados de resultado y lectura del reporte.</p></div></article>
-          <article class="commit"><span class="hash">38ec8d6</span><div><h3>Restauración de secuencias</h3><p>Corrigió la huella que PostgreSQL no revierte automáticamente.</p></div></article>
-          <article class="commit"><span class="hash">7d901d8</span><div><h3>Primer dossier HTML</h3><p>Documentó la primera etapa. Su contenido fue reemplazado al cambiar el motor.</p></div></article>
-          <article class="commit"><span class="hash">c9af47b</span><div><h3>Integración del motor activo</h3><p>Incorporó desde <span class="mono">dev/create-triggers</span> el esquema, dataset y reglas mejoradas, conservando P1.</p></div></article>
-          <article class="commit"><span class="hash">5877fbf</span><div><h3>Validación del motor integrado</h3><p>Adaptó estados y capacidad, reforzó R15 y agregó el escenario avanzado para R16, R17 y P4.</p></div></article>
-          <article class="commit"><span class="hash">7766243</span><div><h3>Presentación de cobertura integrada</h3><p>Actualizó el reporte y la guía para el nuevo motor.</p></div></article>
-          <article class="commit"><span class="hash">3387c0f</span><div><h3>Auditoría final de coherencia</h3><p>Eliminó supuestos restantes, probó P1, sinceró R18/R19/R20 y alineó tests con el motor final.</p></div></article>
+          <article class="commit"><span class="hash">80f2232</span><div><h3>Harness transaccional</h3><p>Creó la infraestructura sobre la que funciona toda la rama.</p><ul><li>Runner único con transacción y rollback.</li><li>Resultados, métricas y matriz de cobertura temporales.</li><li>Snapshots del estado base y utilidades para resolver catálogos sin IDs fijos.</li></ul></div></article>
+          <article class="commit"><span class="hash">58fec2a</span><div><h3>Reconstrucción de escenarios</h3><p>Eliminó siete demostraciones manuales y las reemplazó por módulos verificables.</p><ul><li>Agregó preflight, asignación, ciclo de vida, validaciones, IoT, saturación y brechas.</li><li>Cada módulo captura errores inesperados y registra evidencia.</li></ul></div></article>
+          <article class="commit"><span class="hash">13e43dd</span><div><h3>Ráfaga de veinte</h3><p>Convirtió el requisito obligatorio en una carga determinística.</p><ul><li>Crea veinte pares tipo/zona únicos en una sentencia.</li><li>Induce éxitos y fallas repetibles y mide atención, pendientes, resolución y reasignación.</li></ul></div></article>
+          <article class="commit"><span class="hash">613322e</span><div><h3>Reporte operativo</h3><p>Transformó la evidencia técnica en una salida apta para entrega y defensa.</p><ul><li>Veredicto, resumen de estados y matriz R1–R21/P1–P5.</li><li>Indicadores de SLA, recursos, penalizaciones, ranking, auditoría y brechas.</li></ul></div></article>
+          <article class="commit"><span class="hash">64dad1f</span><div><h3>Validaciones de tipo y zona</h3><p>Cerró dos caminos que podían producir falsos positivos.</p><ul><li>Prueba recurso de tipo incompatible.</li><li>Prueba recurso no habilitado para la zona y agrega cobertura al reporte.</li></ul></div></article>
+          <article class="commit"><span class="hash">019c43c</span><div><h3>Guía de ejecución</h3><p>Documentó cómo operar y explicar la suite.</p><ul><li>Describe arquitectura, estados de resultado, flujo funcional y escenarios.</li><li>Advierte sobre locks, simultaneidad lógica y brechas conocidas.</li></ul></div></article>
+          <article class="commit"><span class="hash">38ec8d6</span><div><h3>Restauración de secuencias</h3><p>Corrigió una huella que el rollback por sí solo no eliminaba.</p><ul><li>Captura valor y estado de uso de las secuencias operativas.</li><li>Las restaura antes del rollback para dejar la base realmente igual.</li></ul></div></article>
+          <article class="commit"><span class="hash">7d901d8</span><div><h3>Primer dossier HTML</h3><p>Creó la primera documentación visual por commit.</p><ul><li>Sirvió como fotografía de la etapa previa a la integración.</li><li>Luego fue reemplazado porque sus conclusiones pertenecían al motor anterior.</li></ul></div></article>
+          <article class="commit"><span class="hash">c9af47b</span><div><h3>Integración del motor activo</h3><p>Incorporó selectivamente el conocimiento funcional de <span class="mono">dev/create-triggers</span>.</p><ul><li>Alineó esquema, dataset, vistas, migración y Docker.</li><li>Adoptó capacidad por zona, ciclo En tránsito/Ocupado, R15, reglas temporales, decisiones y penalización proporcional.</li></ul></div></article>
+          <article class="commit"><span class="hash">5877fbf</span><div><h3>Validación del motor integrado</h3><p>Reescribió la suite para comprobar el motor recién incorporado.</p><ul><li>Adaptó estados, capacidad, IoT y harness.</li><li>Reforzó R15 y reemplazó las brechas antiguas por capacidades avanzadas R16, R17 y P4.</li></ul></div></article>
+          <article class="commit"><span class="hash">7766243</span><div><h3>Presentación de cobertura integrada</h3><p>Actualizó reporte y README para que describieran el nuevo sistema.</p><ul><li>Incorporó cobertura de capacidades avanzadas y decisiones.</li><li>Eliminó explicaciones que ya no correspondían al motor final.</li></ul></div></article>
+          <article class="commit"><span class="hash">3387c0f</span><div><h3>Auditoría final de coherencia</h3><p>Contrastó nuevamente consigna, motor, escenarios, reporte y tests.</p><ul><li>Eliminó IDs y candidatos asumidos, probó P1 y reforzó R15/R20.</li><li>Sinceró R18/R19/R20, documentó scheduler externo y alineó tests heredados.</li></ul></div></article>
+          <article class="commit"><span class="hash">df9cfe4</span><div><h3>Reescritura del dossier final</h3><p>Reemplazó la documentación visual obsoleta por una explicación del sistema integrado.</p><ul><li>Documentó la integración selectiva, arquitectura, escenarios y cobertura honesta.</li><li>Esta revisión amplía ese dossier con inventario y bitácora completa de hallazgos.</li></ul></div></article>
         </div>
       </section>
 
