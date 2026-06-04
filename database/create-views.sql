@@ -135,7 +135,7 @@ SELECT
     r.id_recurso, 
     tr.nombre AS tipo_recurso, 
     COUNT(p.id_penalizacion) AS cantidad_infracciones,
-    SUM(tp.puntaje) AS puntos_acumulados,
+    SUM(COALESCE(p.puntaje, tp.puntaje)) AS puntos_acumulados,
     MAX(p.fecha) AS ultima_penalizacion
 FROM Recurso r
 JOIN Penalizacion p ON r.id_recurso = p.fk_recurso_id
@@ -152,7 +152,7 @@ SELECT
     z.nombre AS zona_base,
     (SELECT COUNT(*) FROM Asignacion a WHERE a.fk_recurso_id = r.id_recurso) AS cantidad_asignaciones_historicas,
     COALESCE((
-        SELECT SUM(tp.puntaje)
+        SELECT SUM(COALESCE(p.puntaje, tp.puntaje))
         FROM Penalizacion p
         JOIN TipoPenalizacion tp ON p.fk_tipo_penalizacion_id = tp.id_tipo_penalizacion
         WHERE p.fk_recurso_id = r.id_recurso

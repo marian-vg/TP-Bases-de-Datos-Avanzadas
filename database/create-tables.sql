@@ -73,6 +73,7 @@ CREATE TABLE SLA (
     id_sla SERIAL PRIMARY KEY,
     fk_gravedad_id INT NOT NULL,
     tiempo_respuesta_minutos INT NOT NULL,
+    minutos_por_punto_demora INT NOT NULL, -- Tramo de exceso sobre el SLA que equivale a 1 punto de penalización por demora (P4)
     CONSTRAINT fk_sla_gravedad FOREIGN KEY (fk_gravedad_id) 
         REFERENCES Gravedad(id_gravedad) ON DELETE RESTRICT
 );
@@ -81,7 +82,8 @@ CREATE TABLE Zona (
     id_zona SERIAL PRIMARY KEY,
     nombre VARCHAR(100) NOT NULL UNIQUE,
     fk_nivel_riesgo_id INT NOT NULL,
-    CONSTRAINT fk_zona_nivel_riesgo FOREIGN KEY (fk_nivel_riesgo_id) 
+    umbral_incidentes_activos INT NOT NULL, -- Tope de incidentes en atención (En proceso/Escalado) que admite la zona antes de dejar los nuevos en 'Pendiente' (R20)
+    CONSTRAINT fk_zona_nivel_riesgo FOREIGN KEY (fk_nivel_riesgo_id)
         REFERENCES NivelRiesgo(id_nivel_riesgo) ON DELETE RESTRICT
 );
 
@@ -233,6 +235,7 @@ CREATE TABLE Penalizacion (
     fk_tipo_penalizacion_id INT NOT NULL,
     fecha DATE NOT NULL DEFAULT CURRENT_DATE,
     hora TIME NOT NULL DEFAULT CURRENT_TIME,
+    puntaje INT NULL, -- Puntos reales de esta penalización; NULL usa TipoPenalizacion.puntaje vía COALESCE (R4/R9 conservan el default, P4 calcula proporcional).
     motivo TEXT NOT NULL,
     CONSTRAINT fk_penalizacion_recurso FOREIGN KEY (fk_recurso_id) 
         REFERENCES Recurso(id_recurso) ON DELETE CASCADE,
@@ -251,7 +254,7 @@ CREATE TABLE Log (
     timestamp TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     tablaAfectada VARCHAR(50) NOT NULL,    -- Nombre de la tabla física mutada
     idTablaAfectada BIGINT NOT NULL,       -- ID / PK del registro afectado
-    operacion VARCHAR(10) NOT NULL,        -- 'INSERT', 'UPDATE' o 'DELETE' (R19)
+    operacion VARCHAR(10) NOT NULL,        -- 'INSERT'/'UPDATE'/'DELETE' (R19) o 'DECISION' (R18, ver fn_registrar_decision)
     trigger_disparador VARCHAR(100) NULL,  -- Nombre del trigger. Es NULL si la acción fue manual (R19)
     detalle JSONB NOT NULL                 -- Payload con datos consolidados, estados y motivos (R18)
 );

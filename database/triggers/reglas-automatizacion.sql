@@ -9,19 +9,22 @@
 --   create-tables.sql -> carga-dataset.sql -> reglas-validadoras.sql -> reglas-activas.sql
 --
 -- Mapa de reglas:
---   R1     Asignación automática de recursos al registrarse un incidente (respeta UMBRAL_RECURSOS_ACTIVOS).
+--   R1     Asignación automática de recursos al registrarse un incidente (respeta el tope de incidentes
+--          en atención por zona — Zona.umbral_incidentes_activos — y rebalancea la zona (R15) si está
+--          desabastecida antes de despachar).
 --   R2     El incidente pasa a 'En proceso' al asignarse un recurso.
 --   R3     Auditoría genérica de cada movimiento (una sola fn_auditoria sobre las tablas operativas).
 --   R4/R9  Asignación fallida: penaliza el recurso, lo libera y reasigna uno nuevo.
 --   R5     Cantidad de recursos según gravedad (Baja/Moderada=1, Alta=2, Crítica=3, Catastrófica=4).
 --   R7     Cierre automático del incidente ('Resuelto') cuando finalizan todas sus asignaciones.
---   R8     Estado del recurso según su asignación ('Disponible' <-> 'Ocupado').
+--   R8     Estado del recurso según su asignación ('Disponible' -> 'En tránsito' -> 'Ocupado' -> 'Disponible').
 --   R14    Selección del mejor recurso: el motor ordena los candidatos por Recurso.puntaje DESC.
 --          El puntaje lo mantiene database/triggers/reglas-inteligencia.sql (cargar ANTES que este).
 --   R21    Promoción de evento a incidente solo si la confianza del sensor supera el umbral y el
 --          tipo de evento deriva a UN único tipo de incidente (TipoEventoTipoIncidente).
 --
--- Dependencias de esquema: tabla TipoEventoTipoIncidente y parámetro UMBRAL_RECURSOS_ACTIVOS.
+-- Dependencias de esquema: tabla TipoEventoTipoIncidente, columna Zona.umbral_incidentes_activos
+--   y la función fn_rebalancear_zona (definida en reglas-inteligencia.sql, debe cargarse antes).
 -- Convención: funciones fn_*, triggers trg_*; idempotente (CREATE OR REPLACE + DROP TRIGGER IF EXISTS).
 -- =============================================================================================================
 
@@ -85,16 +88,8 @@ $$ LANGUAGE sql IMMUTABLE;
 CREATE OR REPLACE FUNCTION fn_asignar_recursos_incidente(p_id_incidente INT, p_cantidad INT)
 RETURNS INT AS $$
 DECLARE
-    v_insertados INT := 0;
-    v_actuales INT := 0;
-    v_restantes INT;
-    v_recurso_id INT;
-    v_zona_incidente INT;
+    v_insertados INT;
 BEGIN
-    -- Obtener la zona del incidente
-    SELECT fk_zona_id INTO v_zona_incidente FROM Incidente WHERE id_incidente = p_id_incidente;
-
-    -- 1. Intentar asignación local (con zona habilitada)
     INSERT INTO Asignacion (fk_recurso_id, fk_incidente_id)
     SELECT r.id_recurso, p_id_incidente
     FROM Recurso r
@@ -116,7 +111,11 @@ BEGIN
           SELECT 1
           FROM ZonaRecurso zr
           WHERE zr.id_recurso = r.id_recurso
-            AND zr.id_zona = v_zona_incidente
+            AND zr.id_zona = (
+                SELECT i.fk_zona_id
+                FROM Incidente i
+                WHERE i.id_incidente = p_id_incidente
+            )
       )
       -- d) sin asignación activa (timestamp_finalizacion IS NULL = en curso)
       AND NOT EXISTS (
@@ -128,104 +127,72 @@ BEGIN
     ORDER BY r.puntaje DESC, r.id_recurso   -- R14: mejor desempeño primero; id_recurso desempata
     LIMIT p_cantidad;
 
-    GET DIAGNOSTICS v_actuales = ROW_COUNT;
-    v_insertados := v_actuales;
-
-    -- 2. R15: Rebalanceo geográfico. Si faltan recursos, buscamos a nivel global (ignorando zona)
-    v_restantes := p_cantidad - v_insertados;
-    IF v_restantes > 0 THEN
-        -- Habilitamos bypass_zona temporalmente en esta transacción para omitir la validación de zona (R10)
-        PERFORM set_config('my.bypass_zona', '1', true);
-
-        FOR v_recurso_id IN
-            SELECT r.id_recurso
-            FROM Recurso r
-            JOIN EstadoRecurso er ON r.fk_estado_recurso_id = er.id_estado_recurso
-            WHERE er.nombre = 'Disponible'
-              -- b) el tipo de recurso debe ser aplicable al tipo del incidente
-              AND EXISTS (
-                  SELECT 1
-                  FROM TipoIncidenteTipoRecurso titr
-                  WHERE titr.fk_tipo_recurso_id   = r.fk_tipo_recurso_id
-                    AND titr.fk_tipo_incidente_id = (
-                        SELECT i.fk_tipo_incidente_id
-                        FROM Incidente i
-                        WHERE i.id_incidente = p_id_incidente
-                    )
-              )
-              -- d) sin asignación activa (timestamp_finalizacion IS NULL = en curso)
-              AND NOT EXISTS (
-                  SELECT 1
-                  FROM Asignacion a
-                  WHERE a.fk_recurso_id = r.id_recurso
-                    AND a.timestamp_finalizacion IS NULL
-              )
-            ORDER BY r.puntaje DESC, r.id_recurso
-            LIMIT v_restantes
-        LOOP
-            INSERT INTO Asignacion (fk_recurso_id, fk_incidente_id)
-            VALUES (v_recurso_id, p_id_incidente);
-
-            -- R18 / R19: Registrar la decisión de rebalanceo geográfico en auditoría
-            INSERT INTO Log (tablaAfectada, idTablaAfectada, operacion, trigger_disparador, detalle)
-            VALUES (
-                'Asignacion',
-                (SELECT currval(pg_get_serial_sequence('Asignacion', 'id_asignacion'))),
-                'INSERT',
-                'fn_asignar_recursos_incidente',
-                jsonb_build_object(
-                    'accion', 'Rebalanceo geográfico (R15)',
-                    'recurso_id', v_recurso_id,
-                    'incidente_id', p_id_incidente,
-                    'motivo', 'Falta de recursos locales disponibles en la zona del incidente'
-                )
-            );
-
-            v_insertados := v_insertados + 1;
-        END LOOP;
-
-        -- Restauramos el valor del bypass
-        PERFORM set_config('my.bypass_zona', '', true);
-    END IF;
-
+    GET DIAGNOSTICS v_insertados = ROW_COUNT;
     RETURN v_insertados;
 END;
 $$ LANGUAGE plpgsql;
 
 
 -- =============================================================================================================
--- 3. R1 — fn_asignacion_automatica / trg_asignacion_automatica
+-- 3. R1 + R15 — fn_asignacion_automatica / trg_asignacion_automatica
 -- =============================================================================================================
 --
--- Al insertar un incidente, verifica si el sistema tiene capacidad (asignaciones abiertas
--- por debajo del umbral UMBRAL_RECURSOS_ACTIVOS, default 50). Si hay capacidad, invoca el
--- motor para despachar la cantidad de recursos que corresponde a la gravedad del incidente.
--- Si se superó el umbral, el incidente queda en estado 'Pendiente' sin asignación.
+-- Al insertar un incidente:
+--   1. Control de capacidad por zona (R20): cuenta los incidentes en atención ('En proceso' o 'Escalado')
+--      en la misma zona y los compara con Zona.umbral_incidentes_activos. Si se alcanzó el tope, el
+--      incidente queda en 'Pendiente' (su estado por defecto) sin asignar ningún recurso.
+--      Los incidentes en 'Pendiente' NO se cuentan para no bloquear la zona indefinidamente.
+--   2. Rebalanceo (R15): si hay capacidad, por cada tipo de recurso aplicable al tipo del incidente
+--      llama a fn_rebalancear_zona. La función es auto-guardada: si la zona ya tiene disponibilidad
+--      del tipo, no hace nada; si no, importa un recurso de otra zona.
+--   3. Despacho (R1): invoca fn_asignar_recursos_incidente con la cantidad que corresponde a la
+--      gravedad (fn_recursos_por_gravedad).
 
 CREATE OR REPLACE FUNCTION fn_asignacion_automatica()
 RETURNS TRIGGER AS $$
 DECLARE
-    v_umbral       INT;
-    v_asignaciones_abiertas INT;
+    v_umbral      INT;
+    v_en_atencion INT;
+    v_tipo        INT;
+    v_asignados   INT;
 BEGIN
-    -- Leer el umbral del sistema; si no está configurado, usar 50 como valor por defecto.
-    SELECT COALESCE(
-        (SELECT numero FROM ParametrosSistema WHERE nombre_parametro = 'UMBRAL_RECURSOS_ACTIVOS'),
-        50
-    ) INTO v_umbral;
+    -- 1. Control de capacidad por zona (R20): leer el tope configurado en la zona del incidente.
+    SELECT umbral_incidentes_activos
+    INTO v_umbral
+    FROM Zona
+    WHERE id_zona = NEW.fk_zona_id;
 
-    -- Contar asignaciones globalmente abiertas (sin fecha de finalización).
+    -- Contar incidentes actualmente en atención en la zona ('En proceso' o 'Escalado').
+    -- 'Pendiente' se excluye deliberadamente para no bloquear la zona indefinidamente.
     SELECT count(*)
-    INTO v_asignaciones_abiertas
-    FROM Asignacion
-    WHERE timestamp_finalizacion IS NULL;
+    INTO v_en_atencion
+    FROM Incidente i
+    JOIN EstadoIncidente ei ON ei.id_estado_incidente = i.fk_estado_incidente_id
+    WHERE i.fk_zona_id = NEW.fk_zona_id
+      AND ei.nombre IN ('En proceso', 'Escalado');
 
-    -- Solo despachar si estamos por debajo del umbral.
-    IF v_asignaciones_abiertas < v_umbral THEN
-        PERFORM fn_asignar_recursos_incidente(
-            NEW.id_incidente,
-            fn_recursos_por_gravedad(NEW.fk_gravedad_id)
-        );
+    -- Si la zona está al tope, el incidente queda en 'Pendiente' sin asignación.
+    IF v_en_atencion >= v_umbral THEN
+        PERFORM fn_registrar_decision('incidente', NEW.id_incidente, 'R20',
+            'Incidente en espera: zona '||NEW.fk_zona_id||' al tope de capacidad ('||v_en_atencion||'/'||v_umbral||').');
+        RETURN NEW;
+    END IF;
+
+    -- 2. Rebalanceo (R15): por cada tipo de recurso aplicable al tipo del incidente,
+    --    asegurar cobertura en la zona antes de despachar.
+    FOR v_tipo IN
+        SELECT fk_tipo_recurso_id
+        FROM TipoIncidenteTipoRecurso
+        WHERE fk_tipo_incidente_id = NEW.fk_tipo_incidente_id
+    LOOP
+        PERFORM fn_rebalancear_zona(NEW.fk_zona_id, v_tipo);
+    END LOOP;
+
+    -- 3. Despacho (R1): asignar la cantidad de recursos según gravedad del incidente.
+    v_asignados := fn_asignar_recursos_incidente(NEW.id_incidente, fn_recursos_por_gravedad(NEW.fk_gravedad_id));
+    IF v_asignados > 0 THEN
+        PERFORM fn_registrar_decision('incidente', NEW.id_incidente, 'R1',
+            'Asignados '||v_asignados||' recurso(s) disponible(s) de mayor puntaje en la zona.');
     END IF;
 
     RETURN NEW;
@@ -244,7 +211,7 @@ EXECUTE FUNCTION fn_asignacion_automatica();
 -- =============================================================================================================
 --
 -- Al insertar una asignación nueva:
---   R8 (efecto): pasa el recurso asignado de 'Disponible' a 'Ocupado'.
+--   R8 (efecto): pasa el recurso asignado de 'Disponible' a 'En tránsito'.
 --   R2: si el incidente asociado aún está en 'Pendiente', lo mueve a 'En proceso'.
 --       No se toca si el incidente ya está en cualquier otro estado posterior (En proceso,
 --       Escalado, etc.) para no pisar transiciones legítimas posteriores.
@@ -252,12 +219,13 @@ EXECUTE FUNCTION fn_asignacion_automatica();
 CREATE OR REPLACE FUNCTION fn_asignacion_aplicada()
 RETURNS TRIGGER AS $$
 BEGIN
-    -- R8: marcar el recurso como 'Ocupado' ahora que tiene una asignación activa.
+    -- R8: marcar el recurso como 'En tránsito' ahora que tiene una asignación activa.
+    --     El paso a 'Ocupado' representa el arribo y dispara P4 (penalización por demora).
     UPDATE Recurso
     SET fk_estado_recurso_id = (
         SELECT id_estado_recurso
         FROM EstadoRecurso
-        WHERE nombre = 'Ocupado'
+        WHERE nombre = 'En tránsito'
     )
     WHERE id_recurso = NEW.fk_recurso_id;
 
@@ -286,6 +254,142 @@ CREATE TRIGGER trg_asignacion_aplicada
 AFTER INSERT ON Asignacion
 FOR EACH ROW
 EXECUTE FUNCTION fn_asignacion_aplicada();
+
+-- =============================================================================================================
+-- 5. P4 — sp_CalcularPenalizacion
+-- =============================================================================================================
+--
+-- Penaliza la demora de arribo del recurso solo por el exceso sobre el SLA de la gravedad del incidente.
+-- Es el espejo del bonus SLA de R14: dentro del SLA no penaliza y queda elegible al bonus al cerrar;
+-- fuera del SLA penaliza al arribar con un puntaje proporcional.
+
+CREATE OR REPLACE PROCEDURE sp_CalcularPenalizacion(p_id_asignacion INT)
+LANGUAGE plpgsql
+AS $$
+DECLARE
+    v_recurso_id                 INT;
+    v_incidente_id               INT;
+    v_timestamp_asignacion       TIMESTAMP;
+    v_timestamp_llegada          TIMESTAMP;
+    v_sla_minutos                INT;
+    v_minutos_por_punto_demora   INT;
+    v_minutos_respuesta          NUMERIC;
+    v_exceso_minutos             NUMERIC;
+    v_puntos                     INT;
+    v_tipo_penalizacion_id       INT;
+    v_tipo_penalizacion_nombre   TEXT;
+BEGIN
+    SELECT a.fk_recurso_id, a.fk_incidente_id, a.timestamp_asignacion, a.timestamp_llegada,
+           s.tiempo_respuesta_minutos, s.minutos_por_punto_demora
+      INTO v_recurso_id, v_incidente_id, v_timestamp_asignacion, v_timestamp_llegada,
+           v_sla_minutos, v_minutos_por_punto_demora
+    FROM Asignacion a
+    JOIN Incidente i ON i.id_incidente = a.fk_incidente_id
+    JOIN SLA s       ON s.fk_gravedad_id = i.fk_gravedad_id
+    WHERE a.id_asignacion = p_id_asignacion;
+
+    IF v_recurso_id IS NULL OR v_timestamp_llegada IS NULL THEN
+        RETURN;
+    END IF;
+
+    v_minutos_respuesta := EXTRACT(EPOCH FROM (v_timestamp_llegada - v_timestamp_asignacion)) / 60;
+    v_exceso_minutos := v_minutos_respuesta - v_sla_minutos;
+
+    IF v_exceso_minutos <= 0 THEN
+        RETURN;
+    END IF;
+
+    v_puntos := floor(v_exceso_minutos / v_minutos_por_punto_demora);
+    IF v_puntos <= 0 THEN
+        RETURN;
+    END IF;
+
+    v_tipo_penalizacion_nombre := CASE
+        WHEN v_puntos = 1 THEN 'Demora leve'
+        WHEN v_puntos = 2 THEN 'Demora moderada'
+        ELSE 'Demora grave'
+    END;
+
+    SELECT id_tipo_penalizacion
+      INTO v_tipo_penalizacion_id
+    FROM TipoPenalizacion
+    WHERE nombre = v_tipo_penalizacion_nombre;
+
+    IF v_tipo_penalizacion_id IS NULL THEN
+        RAISE EXCEPTION 'No existe TipoPenalizacion para %.', v_tipo_penalizacion_nombre;
+    END IF;
+
+    INSERT INTO Penalizacion (fk_recurso_id, fk_tipo_penalizacion_id, puntaje, motivo)
+    VALUES (
+        v_recurso_id,
+        v_tipo_penalizacion_id,
+        v_puntos,
+        'Demora de ' || floor(v_minutos_respuesta)::INT || ' min (' ||
+        floor(v_exceso_minutos)::INT || ' sobre SLA) en asignación #' || p_id_asignacion ||
+        ' para el incidente #' || v_incidente_id || '.'
+    );
+
+    PERFORM fn_registrar_decision('recurso', v_recurso_id, 'P4',
+        'Demora de ' || floor(v_minutos_respuesta)::INT || ' min (' ||
+        floor(v_exceso_minutos)::INT || ' sobre SLA): -' || v_puntos || ' puntos');
+END;
+$$;
+
+
+-- =============================================================================================================
+-- 6. P4/R8(arribo) — fn_arribo_recurso / trg_arribo_recurso
+-- =============================================================================================================
+--
+-- Al pasar un recurso de 'En tránsito' a 'Ocupado', se interpreta como arribo al lugar:
+-- completa timestamp_llegada en la asignación abierta y calcula la penalización proporcional si llegó tarde.
+
+CREATE OR REPLACE FUNCTION fn_arribo_recurso()
+RETURNS TRIGGER AS $$
+DECLARE
+    v_estado_old TEXT;
+    v_estado_new TEXT;
+    v_asignacion INT;
+BEGIN
+    SELECT nombre INTO v_estado_old
+    FROM EstadoRecurso
+    WHERE id_estado_recurso = OLD.fk_estado_recurso_id;
+
+    SELECT nombre INTO v_estado_new
+    FROM EstadoRecurso
+    WHERE id_estado_recurso = NEW.fk_estado_recurso_id;
+
+    IF v_estado_old <> 'En tránsito' OR v_estado_new <> 'Ocupado' THEN
+        RETURN NEW;
+    END IF;
+
+    SELECT id_asignacion
+      INTO v_asignacion
+    FROM Asignacion
+    WHERE fk_recurso_id = NEW.id_recurso
+      AND timestamp_finalizacion IS NULL
+      AND timestamp_llegada IS NULL
+    ORDER BY id_asignacion
+    LIMIT 1;
+
+    IF v_asignacion IS NULL THEN
+        RETURN NEW;
+    END IF;
+
+    UPDATE Asignacion
+    SET timestamp_llegada = CURRENT_TIMESTAMP
+    WHERE id_asignacion = v_asignacion;
+
+    CALL sp_CalcularPenalizacion(v_asignacion);
+
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS trg_arribo_recurso ON Recurso;
+CREATE TRIGGER trg_arribo_recurso
+AFTER UPDATE OF fk_estado_recurso_id ON Recurso
+FOR EACH ROW
+EXECUTE FUNCTION fn_arribo_recurso();
 -- =============================================================================================================
 -- BLOQUE: GESTIÓN DE FINALIZACIÓN DE ASIGNACIONES (R8 + R4/R9 + R7)
 -- =============================================================================================================
@@ -317,6 +421,8 @@ DECLARE
     v_id_tipo_penalizacion INT;
     v_id_estado_disponible INT;
     v_id_estado_resuelto   INT;
+    v_reasignados          INT;
+    v_cerrados             INT;
 BEGIN
     -- -------------------------------------------------------------------------
     -- RAMA 1 — FALLA (R4/R9)
@@ -344,7 +450,9 @@ BEGIN
         -- b) Reasignar un recurso nuevo para el incidente.
         --    La asignación fallida aún está abierta (timestamp_finalizacion IS NULL),
         --    por lo que el motor de asignación NO reelige el recurso fallido (lo ve como ocupado).
-        PERFORM fn_asignar_recursos_incidente(NEW.fk_incidente_id, 1);
+        v_reasignados := fn_asignar_recursos_incidente(NEW.fk_incidente_id, 1);
+        PERFORM fn_registrar_decision('asignacion', NEW.id_asignacion, 'R4/R9',
+            'Falla en asignación #'||NEW.id_asignacion||': recurso '||NEW.fk_recurso_id||' penalizado y reasignados '||v_reasignados||' recurso(s).');
 
         -- c) Cerrar la asignación fallida para liberar lógicamente al recurso.
         --    Este UPDATE re-dispara el trigger (pasada 2), pero con OLD.estado_exito = FALSE,
@@ -406,6 +514,11 @@ BEGIN
                   FROM EstadoIncidente
                   WHERE nombre IN ('Resuelto', 'Cancelado')
               );
+            GET DIAGNOSTICS v_cerrados = ROW_COUNT;
+            IF v_cerrados > 0 THEN
+                PERFORM fn_registrar_decision('incidente', NEW.fk_incidente_id, 'R7',
+                    'Incidente resuelto automáticamente: todas las asignaciones finalizadas con al menos un éxito.');
+            END IF;
         END IF;
 
     END IF;
@@ -462,7 +575,27 @@ $$ LANGUAGE plpgsql;
 
 
 -- ============================================================================
--- 2. fn_auditoria — R3 (auditoría genérica, un trigger por tabla)
+-- 2. fn_registrar_decision — R18 (registro de decisiones automáticas)
+-- ============================================================================
+--
+-- R18: registro de decisiones automáticas. Cada regla activa que decide con un criterio
+-- deja una fila en Log con operacion 'DECISION' y detalle {regla, motivo}. Convive con
+-- fn_auditoria (R19). Consulta de decisiones: SELECT ... FROM Log WHERE operacion = 'DECISION'.
+
+CREATE OR REPLACE FUNCTION fn_registrar_decision(
+    p_tabla   VARCHAR,
+    p_id      BIGINT,
+    p_regla   VARCHAR,
+    p_motivo  TEXT
+) RETURNS VOID AS $$
+    INSERT INTO Log (tablaAfectada, idTablaAfectada, operacion, trigger_disparador, detalle)
+    VALUES (p_tabla, p_id, 'DECISION', p_regla,
+            jsonb_build_object('regla', p_regla, 'motivo', p_motivo));
+$$ LANGUAGE sql;
+
+
+-- ============================================================================
+-- 3. fn_auditoria — R3 (auditoría genérica, un trigger por tabla)
 -- ============================================================================
 --
 -- Recibe el nombre de la columna PK de cada tabla como TG_ARGV[0].
@@ -540,7 +673,7 @@ EXECUTE FUNCTION fn_auditoria('id_evento');
 
 
 -- ============================================================================
--- 3. fn_evento_promocion + trg_evento_promocion — R21
+-- 4. fn_evento_promocion + trg_evento_promocion — R21
 -- ============================================================================
 --
 -- Evalúa la confianza del sensor que generó el evento.
@@ -575,17 +708,8 @@ BEGIN
     -- Sensor no confiable: registramos en Log y no promovemos
     -- -------------------------------------------------------------------------
     IF v_confianza <= v_umbral THEN
-        INSERT INTO Log (tablaAfectada, idTablaAfectada, operacion, trigger_disparador, detalle)
-        VALUES (
-            'evento',
-            NEW.id_evento,
-            'INSERT',
-            TG_NAME,
-            jsonb_build_object(
-                'confianza', v_confianza,
-                'motivo',    'Evento de baja fiabilidad, no se promueve a incidente'
-            )
-        );
+        PERFORM fn_registrar_decision('evento', NEW.id_evento, 'R21',
+            'Evento de baja fiabilidad (confianza '||v_confianza||'), no se promueve a incidente.');
         RETURN NEW;
     END IF;
 
@@ -638,33 +762,17 @@ BEGIN
                 'Incidente generado automáticamente a partir del evento #' || NEW.id_evento,
                 v_gravedad_id   -- baseline/placeholder hasta R12
             );
+            PERFORM fn_registrar_decision('evento', NEW.id_evento, 'R21',
+                'Evento promovido a incidente (confianza '||v_confianza||' > umbral '||v_umbral||', mapeo único).');
         EXCEPTION WHEN OTHERS THEN
-            INSERT INTO Log (tablaAfectada, idTablaAfectada, operacion, trigger_disparador, detalle)
-            VALUES (
-                'Evento',
-                NEW.id_evento,
-                'INSERT',
-                TG_NAME,
-                jsonb_build_object(
-                    'motivo', 'No se pudo crear el incidente automático',
-                    'error',  SQLERRM
-                )
-            );
+            PERFORM fn_registrar_decision('evento', NEW.id_evento, 'R21',
+                'No se pudo crear el incidente automático: '||SQLERRM);
         END;
 
     ELSE
         -- 0 o >1 mapeos: no es posible determinar un incidente unívoco
-        INSERT INTO Log (tablaAfectada, idTablaAfectada, operacion, trigger_disparador, detalle)
-        VALUES (
-            'evento',
-            NEW.id_evento,
-            'INSERT',
-            TG_NAME,
-            jsonb_build_object(
-                'cant_mapeos', v_cant_mapeos,
-                'motivo',      'Evento no promovido: mapeo a tipo de incidente no es único'
-            )
-        );
+        PERFORM fn_registrar_decision('evento', NEW.id_evento, 'R21',
+            'Evento no promovido: '||v_cant_mapeos||' mapeo(s) a tipo de incidente (no es único).');
     END IF;
 
     RETURN NEW;
