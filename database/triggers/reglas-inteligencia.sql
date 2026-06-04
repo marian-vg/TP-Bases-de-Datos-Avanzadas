@@ -2,46 +2,22 @@
 -- REGLAS DE INTELIGENCIA — Smart City (PostgreSQL 16)
 -- =============================================================================================================
 --
--- Implementación de R14 (Selección del mejor recurso) mediante un PUNTAJE de desempeño
--- materializado en Recurso.puntaje. La selección del mejor recurso NO se calcula al asignar
--- (sería caro recorrer historial en cada incidente): el puntaje se mantiene precalculado por
--- los triggers de este archivo, y el motor de asignación (reglas-automatizacion.sql) solo
--- tiene que ordenar por ese campo ya listo.
---
--- SEPARACIÓN DE CAPAS:
---   Este archivo NO conoce ni invoca al motor de automatización. Reacciona a HECHOS que ya
---   ocurrieron en las tablas base (una asignación marcada exitosa, una penalización insertada),
---   sin importar qué regla los provocó. Los triggers se encadenan a través de las tablas, no
---   por llamadas directas: cuando R4 (reglas-automatizacion.sql) inserta en Penalizacion, el
---   trigger de resta de puntaje de acá se dispara solo.
---
--- FÓRMULA DEL PUNTAJE:
---   + 1               por cada asignación marcada exitosa (estado_exito -> TRUE).
---   + 1 extra         cada vez que el recurso completa una racha de 3 éxitos consecutivos
---                     (en el 3.º, 6.º, 9.º… éxito seguido; una falla reinicia la cuenta).
---   + id_gravedad     si la asignación exitosa cumplió el SLA: llegó dentro del tiempo de
---                     respuesta pactado para la gravedad del incidente (Baja=+1 … Catastrófica=+5).
---   - TipoPenalizacion.puntaje   por cada penalización registrada (escala 1 a 5).
---   Los fracasos NO restan acá: ya conllevan una penalización que descuenta por su cuenta.
+-- Implementación de R12, R13, R14 y R15.
+-- 
+-- Mapa de reglas:
+--   R12: Priorización automática por gravedad (Gravedad * 10).
+--   R13: Bonus de prioridad por ocurrir en zonas de alto riesgo.
+--   R14: Selección del mejor recurso mediante sistema de puntajes histórico.
+--   R15: Rebalanceo automático de recursos hacia zonas desabastecidas (sin romper R10).
 --
 -- Orden de carga: create-tables.sql -> carga-dataset.sql -> reglas-validadoras.sql ->
 --                 reglas-inteligencia.sql -> reglas-automatizacion.sql
---                 (la columna Recurso.puntaje la crea create-tables; el dataset base no trae
---                  historial operativo, así que todos los recursos arrancan en 0).
---
--- Nota de auditoría: cada cambio de puntaje hace UPDATE Recurso, que dispara trg_audit_recurso
--- (R3) y deja una fila en Log. Es ruido esperado y aceptable: el puntaje es trazable.
--- Convención: funciones fn_*, triggers trg_*; idempotente (CREATE OR REPLACE + DROP TRIGGER IF EXISTS).
 -- =============================================================================================================
 
 
 -- =============================================================================================================
 -- 1. fn_puntaje_por_penalizacion / trg_puntaje_por_penalizacion — R14 (resta)
 -- =============================================================================================================
---
--- Al registrarse una penalización, descuenta del recurso los puntos definidos en el tipo de
--- penalización (TipoPenalizacion.puntaje, escala 1 a 5). El puntaje puede quedar negativo:
--- es deseable, porque hunde a los recursos problemáticos al fondo del ranking de R14.
 
 CREATE OR REPLACE FUNCTION fn_puntaje_por_penalizacion()
 RETURNS TRIGGER AS $$
@@ -146,3 +122,118 @@ CREATE TRIGGER trg_puntaje_por_exito
 AFTER UPDATE ON Asignacion
 FOR EACH ROW
 EXECUTE FUNCTION fn_puntaje_por_exito();
+
+-- =============================================================================================================
+-- 3. fn_prioridad_incidente / trg_prioridad_incidente — R12 y R13
+-- =============================================================================================================
+
+CREATE OR REPLACE FUNCTION fn_prioridad_incidente()
+RETURNS TRIGGER AS $$
+DECLARE
+    v_bonus NUMERIC := 0;
+    v_riesgo_valor INT;
+BEGIN
+    -- R12: La prioridad base es la gravedad multiplicada por 10 (ej. Gravedad 3 -> Prioridad 30)
+    NEW.prioridad := NEW.fk_gravedad_id * 10;
+
+    -- R13: Evaluamos el nivel de riesgo de la zona
+    SELECT nr.valor INTO v_riesgo_valor
+    FROM Zona z
+    JOIN NivelRiesgo nr ON z.fk_nivel_riesgo_id = nr.id_nivel_riesgo
+    WHERE z.id_zona = NEW.fk_zona_id;
+
+    -- Si la zona es de alto riesgo (valor >= 3), aplicamos el bonus
+    IF v_riesgo_valor >= 3 THEN
+        SELECT COALESCE(
+            (SELECT numero FROM ParametrosSistema WHERE nombre_parametro = 'BONUS_PRIORIDAD_ZONA_RIESGO'),
+            10
+        ) INTO v_bonus;
+        
+        NEW.prioridad := NEW.prioridad + v_bonus;
+    END IF;
+
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS trg_prioridad_incidente ON Incidente;
+CREATE TRIGGER trg_prioridad_incidente
+BEFORE INSERT OR UPDATE OF fk_gravedad_id, fk_zona_id ON Incidente
+FOR EACH ROW
+EXECUTE FUNCTION fn_prioridad_incidente();
+
+
+-- =============================================================================================================
+-- 4. fn_rebalanceo_recursos / trg_rebalanceo_recursos — R15
+-- =============================================================================================================
+
+CREATE OR REPLACE FUNCTION fn_rebalanceo_recursos()
+RETURNS TRIGGER AS $$
+DECLARE
+    v_zona_recurso RECORD;
+    v_disponibles INT;
+    v_recurso_prestado INT;
+BEGIN
+    -- Solo actuamos si el recurso dejó de estar 'Disponible'
+    IF OLD.fk_estado_recurso_id = 1 AND NEW.fk_estado_recurso_id <> 1 THEN
+        
+        -- Analizamos TODAS las zonas en las que este recurso operaba
+        FOR v_zona_recurso IN (SELECT id_zona FROM ZonaRecurso WHERE id_recurso = NEW.id_recurso) LOOP
+            
+            -- Verificamos cuántos recursos disponibles de este MISMO TIPO quedan en la zona afectada
+            SELECT COUNT(r.id_recurso) INTO v_disponibles
+            FROM Recurso r
+            JOIN ZonaRecurso zr ON r.id_recurso = zr.id_recurso
+            WHERE zr.id_zona = v_zona_recurso.id_zona
+              AND r.fk_tipo_recurso_id = NEW.fk_tipo_recurso_id
+              AND r.fk_estado_recurso_id = 1;
+
+            -- Si la zona se quedó sin cobertura para este tipo de emergencia, rebalanceamos
+            IF v_disponibles = 0 THEN
+                
+                -- Buscamos un reemplazo del mismo tipo, priorizando zonas de bajo riesgo y luego el mejor puntaje (R14)
+                SELECT r.id_recurso INTO v_recurso_prestado
+                FROM Recurso r
+                JOIN Zona z ON r.fk_zona_base_id = z.id_zona
+                JOIN NivelRiesgo nr ON z.fk_nivel_riesgo_id = nr.id_nivel_riesgo
+                WHERE r.fk_tipo_recurso_id = NEW.fk_tipo_recurso_id
+                  AND r.fk_estado_recurso_id = 1
+                  AND NOT EXISTS (
+                      SELECT 1 FROM ZonaRecurso zr2 
+                      WHERE zr2.id_recurso = r.id_recurso AND zr2.id_zona = v_zona_recurso.id_zona
+                  )
+                ORDER BY nr.valor ASC, r.puntaje DESC
+                LIMIT 1;
+
+                -- Insertamos el permiso de zona y logueamos la decisión automática
+                IF v_recurso_prestado IS NOT NULL THEN
+                    INSERT INTO ZonaRecurso (id_zona, id_recurso)
+                    VALUES (v_zona_recurso.id_zona, v_recurso_prestado);
+
+                    INSERT INTO Log (tablaAfectada, idTablaAfectada, operacion, trigger_disparador, detalle)
+                    VALUES (
+                        'ZonaRecurso', 
+                        v_recurso_prestado, 
+                        'INSERT', 
+                        TG_NAME, 
+                        jsonb_build_object(
+                            'motivo', 'R15: Rebalanceo automático por agotamiento de recursos tipo ' || NEW.fk_tipo_recurso_id,
+                            'zona_desabastecida', v_zona_recurso.id_zona,
+                            'recurso_prestado', v_recurso_prestado
+                        )
+                    );
+                END IF;
+                
+            END IF;
+        END LOOP;
+    END IF;
+
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS trg_rebalanceo_recursos ON Recurso;
+CREATE TRIGGER trg_rebalanceo_recursos
+AFTER UPDATE OF fk_estado_recurso_id ON Recurso
+FOR EACH ROW
+EXECUTE FUNCTION fn_rebalanceo_recursos();
