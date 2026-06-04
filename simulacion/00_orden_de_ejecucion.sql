@@ -25,7 +25,7 @@
 --   08_simulacion_20_incidentes.sql
 --
 -- NOTA IMPORTANTE:
---   06 y 07 quedan preparados para validar reglas activas pendientes de la base:
---   penalización por demora y bloqueo por acumulación de penalizaciones. Hasta que
---   esas reglas estén implementadas, esos scripts deben fallar y sirven como guía.
+--   06 queda preparado para validar una regla activa pendiente de la base:
+--   penalización por demora. Hasta que esa regla esté implementada, ese script
+--   debe fallar y sirve como guía.
 -- =============================================================================

@@ -1,12 +1,16 @@
 -- =============================================================================
--- SIMULACION 07 - CASO AVANZADO: BLOQUEO POR PENALIZACIONES
+-- SIMULACION 07 - CASO AVANZADO: RECURSOS BLOQUEADOS / FUERA DE SERVICIO
 -- =============================================================================
--- Demuestra la regla pendiente de bloqueo automático:
--- si un recurso supera PUNTAJE_BLOQUEO_RECURSO por penalizaciones acumuladas,
--- debe pasar a estado "Fuera de servicio".
+-- Demuestra cómo se comporta la base cuando una zona recibe un incidente pero
+-- todos los recursos compatibles están bloqueados operativamente, es decir,
+-- en estado "Fuera de servicio".
 --
--- Este script NO implementa la regla. Calcula dinámicamente cuántas penalizaciones
--- hacen falta según los puntajes reales del catálogo.
+-- La simulación valida dos cosas:
+--   1) la asignación automática no debe usar recursos Fuera de servicio;
+--   2) una asignación manual a un recurso Fuera de servicio debe ser rechazada.
+--
+-- No prueba bloqueo por puntaje acumulado porque eso no forma parte explícita
+-- del modelo acordado para esta simulación.
 -- =============================================================================
 
 \set ON_ERROR_STOP on
@@ -23,74 +27,121 @@ DELETE FROM Log;
 
 DO $$
 DECLARE
-    v_recurso INT;
-    v_tipo_penalizacion INT;
-    v_puntaje_penalizacion INT;
-    v_umbral NUMERIC;
-    v_necesarias INT;
-    v_puntos INT;
-    v_estado TEXT;
+    v_tipo_incidente INT;
+    v_gravedad INT;
+    v_pendiente INT;
+    v_zona INT;
+    v_estado_fuera INT;
+    v_incidente INT;
+    v_recurso_bloqueado INT;
+    v_estado_incidente TEXT;
+    v_asignaciones INT;
+    v_bloqueado BOOLEAN;
 BEGIN
-    SELECT id_recurso INTO v_recurso
+    SELECT id_tipo_incidente INTO v_tipo_incidente FROM TipoIncidente WHERE nombre = 'Emergencia médica';
+    SELECT id_gravedad INTO v_gravedad FROM Gravedad WHERE nombre = 'Baja';
+    SELECT id_estado_incidente INTO v_pendiente FROM EstadoIncidente WHERE nombre = 'Pendiente';
+    SELECT id_zona INTO v_zona FROM Zona WHERE nombre = 'Centro';
+    SELECT id_estado_recurso INTO v_estado_fuera FROM EstadoRecurso WHERE nombre = 'Fuera de servicio';
+
+    -- Dejamos fuera de servicio todos los recursos compatibles con el tipo de
+    -- incidente, no solo los de la zona. Esto evita que R15 rebalancee un
+    -- recurso equivalente desde otra zona y vuelva no determinístico el caso.
+    -- El UPDATE es transaccional y se revierte.
+    UPDATE Recurso r
+    SET fk_estado_recurso_id = v_estado_fuera
+    WHERE EXISTS (
+        SELECT 1
+        FROM TipoIncidenteTipoRecurso titr
+        WHERE titr.fk_tipo_recurso_id = r.fk_tipo_recurso_id
+          AND titr.fk_tipo_incidente_id = v_tipo_incidente
+    );
+
+    SELECT r.id_recurso INTO v_recurso_bloqueado
     FROM Recurso r
-    JOIN EstadoRecurso er ON er.id_estado_recurso = r.fk_estado_recurso_id
-    WHERE er.nombre = 'Disponible'
+    JOIN ZonaRecurso zr ON zr.id_recurso = r.id_recurso AND zr.id_zona = v_zona
+    JOIN TipoIncidenteTipoRecurso titr ON titr.fk_tipo_recurso_id = r.fk_tipo_recurso_id
+    WHERE titr.fk_tipo_incidente_id = v_tipo_incidente
+      AND r.fk_estado_recurso_id = v_estado_fuera
     ORDER BY r.id_recurso
     LIMIT 1;
 
-    SELECT id_tipo_penalizacion, puntaje
-    INTO v_tipo_penalizacion, v_puntaje_penalizacion
-    FROM TipoPenalizacion
-    ORDER BY puntaje DESC, id_tipo_penalizacion
-    LIMIT 1;
-
-    SELECT numero INTO v_umbral
-    FROM ParametrosSistema
-    WHERE nombre_parametro = 'PUNTAJE_BLOQUEO_RECURSO';
-
-    IF v_recurso IS NULL OR v_tipo_penalizacion IS NULL OR COALESCE(v_puntaje_penalizacion, 0) <= 0 THEN
-        RAISE EXCEPTION 'SIM-07 precondición fallida: recurso o tipo de penalización inválido.';
+    IF v_recurso_bloqueado IS NULL THEN
+        RAISE EXCEPTION 'SIM-07 precondición fallida: no se pudo preparar un recurso Fuera de servicio compatible.';
     END IF;
 
-    v_umbral := COALESCE(v_umbral, 75);
-    v_necesarias := floor(v_umbral / v_puntaje_penalizacion)::INT + 1;
+    INSERT INTO Incidente (
+        fk_tipo_incidente_id,
+        fk_gravedad_id,
+        fk_estado_incidente_id,
+        fk_zona_id,
+        descripcion,
+        prioridad
+    )
+    VALUES (
+        v_tipo_incidente,
+        v_gravedad,
+        v_pendiente,
+        v_zona,
+        'SIM-07 incidente con recursos bloqueados',
+        1
+    )
+    RETURNING id_incidente INTO v_incidente;
 
-    INSERT INTO Penalizacion (fk_recurso_id, fk_tipo_penalizacion_id, motivo)
-    SELECT v_recurso, v_tipo_penalizacion, 'SIM-07 penalizacion acumulada #' || s
-    FROM generate_series(1, v_necesarias) AS s;
+    SELECT COUNT(*) INTO v_asignaciones
+    FROM Asignacion
+    WHERE fk_incidente_id = v_incidente;
 
-    SELECT COALESCE(SUM(tp.puntaje), 0) INTO v_puntos
-    FROM Penalizacion p
-    JOIN TipoPenalizacion tp ON tp.id_tipo_penalizacion = p.fk_tipo_penalizacion_id
-    WHERE p.fk_recurso_id = v_recurso;
+    SELECT ei.nombre INTO v_estado_incidente
+    FROM Incidente i
+    JOIN EstadoIncidente ei ON ei.id_estado_incidente = i.fk_estado_incidente_id
+    WHERE i.id_incidente = v_incidente;
 
-    SELECT er.nombre INTO v_estado
-    FROM Recurso r
-    JOIN EstadoRecurso er ON er.id_estado_recurso = r.fk_estado_recurso_id
-    WHERE r.id_recurso = v_recurso;
-
-    IF v_puntos <= v_umbral THEN
-        RAISE EXCEPTION 'SIM-07 fallo de preparación: puntos % no superan umbral %.', v_puntos, v_umbral;
+    IF v_asignaciones <> 0 OR v_estado_incidente <> 'Pendiente' THEN
+        RAISE EXCEPTION 'SIM-07 fallo: con recursos Fuera de servicio se esperaban 0 asignaciones y estado Pendiente; hubo %, estado %.',
+            v_asignaciones, v_estado_incidente;
     END IF;
 
-    IF v_estado <> 'Fuera de servicio' THEN
-        RAISE EXCEPTION 'SIM-07 regla pendiente: recurso % acumuló % puntos (> %) pero quedó en estado %.', v_recurso, v_puntos, v_umbral, v_estado;
+    -- Además validamos que tampoco se pueda forzar una asignación manual al
+    -- recurso bloqueado. La regla validadora debe rechazarla.
+    v_bloqueado := FALSE;
+    BEGIN
+        INSERT INTO Asignacion (fk_recurso_id, fk_incidente_id)
+        VALUES (v_recurso_bloqueado, v_incidente);
+    EXCEPTION WHEN OTHERS THEN
+        v_bloqueado := TRUE;
+        RAISE NOTICE 'SIM-07: asignación manual rechazada correctamente: %', SQLERRM;
+    END;
+
+    IF NOT v_bloqueado THEN
+        RAISE EXCEPTION 'SIM-07 fallo R8: se permitió asignar manualmente el recurso Fuera de servicio %.', v_recurso_bloqueado;
     END IF;
 
-    RAISE NOTICE 'SIM-07 OK: recurso % bloqueado con % puntos acumulados.', v_recurso, v_puntos;
+    RAISE NOTICE 'SIM-07 OK: el incidente quedó Pendiente sin asignación y el recurso Fuera de servicio no pudo asignarse manualmente.';
 END;
 $$;
 
 \echo 'SIM-07: evidencia final'
-SELECT r.id_recurso, tr.nombre AS tipo_recurso, er.nombre AS estado_recurso,
-       COALESCE(SUM(tp.puntaje), 0) AS puntos_acumulados
+SELECT i.id_incidente, i.descripcion, ei.nombre AS estado_incidente,
+       COUNT(a.id_asignacion) AS asignaciones
+FROM Incidente i
+JOIN EstadoIncidente ei ON ei.id_estado_incidente = i.fk_estado_incidente_id
+LEFT JOIN Asignacion a ON a.fk_incidente_id = i.id_incidente
+WHERE i.descripcion = 'SIM-07 incidente con recursos bloqueados'
+GROUP BY i.id_incidente, i.descripcion, ei.nombre;
+
+SELECT r.id_recurso, tr.nombre AS tipo_recurso, er.nombre AS estado_recurso
 FROM Recurso r
 JOIN TipoRecurso tr ON tr.id_tipo_recurso = r.fk_tipo_recurso_id
 JOIN EstadoRecurso er ON er.id_estado_recurso = r.fk_estado_recurso_id
-LEFT JOIN Penalizacion p ON p.fk_recurso_id = r.id_recurso
-LEFT JOIN TipoPenalizacion tp ON tp.id_tipo_penalizacion = p.fk_tipo_penalizacion_id
-WHERE p.motivo LIKE 'SIM-07%'
-GROUP BY r.id_recurso, tr.nombre, er.nombre
-ORDER BY r.id_recurso;
+JOIN ZonaRecurso zr ON zr.id_recurso = r.id_recurso
+JOIN TipoIncidenteTipoRecurso titr ON titr.fk_tipo_recurso_id = r.fk_tipo_recurso_id
+JOIN TipoIncidente ti ON ti.id_tipo_incidente = titr.fk_tipo_incidente_id
+JOIN Zona z ON z.id_zona = zr.id_zona
+WHERE ti.nombre = 'Emergencia médica'
+  AND z.nombre = 'Centro'
+  AND er.nombre = 'Fuera de servicio'
+ORDER BY r.id_recurso
+LIMIT 10;
 
 ROLLBACK;
