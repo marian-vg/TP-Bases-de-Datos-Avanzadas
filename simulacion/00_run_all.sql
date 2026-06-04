@@ -10,7 +10,13 @@ BEGIN;
 
 \ir lib/harness.sql
 
--- Los escenarios y el reporte se incorporan en los siguientes bloques.
+\ir 01_preflight.sql
+\ir 02_asignacion_inteligencia.sql
+\ir 03_ciclo_vida.sql
+\ir 04_validaciones.sql
+\ir 05_sensores_iot.sql
+\ir 06_saturacion_rebalanceo.sql
+\ir 07_brechas_conocidas.sql
 
 SELECT (count(*) FILTER (WHERE estado = 'FAIL') > 0)::int AS sim_tiene_fallos
 FROM sim_resultado
