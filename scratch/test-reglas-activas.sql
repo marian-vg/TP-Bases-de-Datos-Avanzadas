@@ -175,7 +175,7 @@ BEGIN
     END IF;
 
     SELECT detalle->>'motivo' INTO v_motivo
-    FROM Log WHERE trigger_disparador = 'trg_evento_promocion' AND idTablaAfectada = v_evento
+    FROM Log WHERE operacion = 'DECISION' AND detalle->>'regla' = 'R21' AND idTablaAfectada = v_evento
     ORDER BY id_log DESC LIMIT 1;
     IF v_motivo IS NULL OR v_motivo NOT LIKE '%baja fiabilidad%' THEN
         RAISE EXCEPTION 'FALLO R21: no se registró el Log de baja fiabilidad (motivo: %).', v_motivo;
@@ -220,7 +220,7 @@ BEGIN
     END IF;
 
     SELECT detalle->>'motivo' INTO v_motivo
-    FROM Log WHERE trigger_disparador = 'trg_evento_promocion' AND idTablaAfectada = v_evento
+    FROM Log WHERE operacion = 'DECISION' AND detalle->>'regla' = 'R21' AND idTablaAfectada = v_evento
     ORDER BY id_log DESC LIMIT 1;
     IF v_motivo IS NULL OR v_motivo NOT LIKE '%no es único%' THEN
         RAISE EXCEPTION 'FALLO R21: no se registró el Log de mapeo no único (motivo: %).', v_motivo;

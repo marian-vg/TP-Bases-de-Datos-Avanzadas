@@ -232,18 +232,16 @@ BEGIN
     INSERT INTO ZonaRecurso (id_zona, id_recurso)
     VALUES (p_id_zona, v_candidato);
 
-    -- Registramos la decisión en el log de auditoría
+    -- Registramos la decisión en el log de auditoría (R18: convención DECISION)
     INSERT INTO Log (tablaAfectada, idTablaAfectada, operacion, trigger_disparador, detalle)
     VALUES (
         'ZonaRecurso',
         v_candidato,
-        'INSERT',
-        'fn_rebalancear_zona',
+        'DECISION',
+        'R15',
         jsonb_build_object(
-            'motivo',              'R15: rebalanceo por agotamiento de recursos en la zona',
-            'zona_desabastecida',  p_id_zona,
-            'tipo_recurso',        p_id_tipo_recurso,
-            'recurso_prestado',    v_candidato
+            'regla',   'R15',
+            'motivo',  'Rebalanceo: prestado el recurso '||v_candidato||' de otra zona a la zona '||p_id_zona||' (tipo de recurso '||p_id_tipo_recurso||') por agotamiento.'
         )
     );
 

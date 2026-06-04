@@ -252,7 +252,7 @@ CREATE TABLE Log (
     timestamp TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     tablaAfectada VARCHAR(50) NOT NULL,    -- Nombre de la tabla física mutada
     idTablaAfectada BIGINT NOT NULL,       -- ID / PK del registro afectado
-    operacion VARCHAR(10) NOT NULL,        -- 'INSERT', 'UPDATE' o 'DELETE' (R19)
+    operacion VARCHAR(10) NOT NULL,        -- 'INSERT'/'UPDATE'/'DELETE' (R19) o 'DECISION' (R18, ver fn_registrar_decision)
     trigger_disparador VARCHAR(100) NULL,  -- Nombre del trigger. Es NULL si la acción fue manual (R19)
     detalle JSONB NOT NULL                 -- Payload con datos consolidados, estados y motivos (R18)
 );

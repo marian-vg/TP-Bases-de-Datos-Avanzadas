@@ -154,6 +154,7 @@ DECLARE
     v_umbral      INT;
     v_en_atencion INT;
     v_tipo        INT;
+    v_asignados   INT;
 BEGIN
     -- 1. Control de capacidad por zona (R20): leer el tope configurado en la zona del incidente.
     SELECT umbral_incidentes_activos
@@ -172,6 +173,8 @@ BEGIN
 
     -- Si la zona está al tope, el incidente queda en 'Pendiente' sin asignación.
     IF v_en_atencion >= v_umbral THEN
+        PERFORM fn_registrar_decision('incidente', NEW.id_incidente, 'R20',
+            'Incidente en espera: zona '||NEW.fk_zona_id||' al tope de capacidad ('||v_en_atencion||'/'||v_umbral||').');
         RETURN NEW;
     END IF;
 
@@ -186,10 +189,11 @@ BEGIN
     END LOOP;
 
     -- 3. Despacho (R1): asignar la cantidad de recursos según gravedad del incidente.
-    PERFORM fn_asignar_recursos_incidente(
-        NEW.id_incidente,
-        fn_recursos_por_gravedad(NEW.fk_gravedad_id)
-    );
+    v_asignados := fn_asignar_recursos_incidente(NEW.id_incidente, fn_recursos_por_gravedad(NEW.fk_gravedad_id));
+    IF v_asignados > 0 THEN
+        PERFORM fn_registrar_decision('incidente', NEW.id_incidente, 'R1',
+            'Asignados '||v_asignados||' recurso(s) disponible(s) de mayor puntaje en la zona.');
+    END IF;
 
     RETURN NEW;
 END;
@@ -280,6 +284,8 @@ DECLARE
     v_id_tipo_penalizacion INT;
     v_id_estado_disponible INT;
     v_id_estado_resuelto   INT;
+    v_reasignados          INT;
+    v_cerrados             INT;
 BEGIN
     -- -------------------------------------------------------------------------
     -- RAMA 1 — FALLA (R4/R9)
@@ -307,7 +313,9 @@ BEGIN
         -- b) Reasignar un recurso nuevo para el incidente.
         --    La asignación fallida aún está abierta (timestamp_finalizacion IS NULL),
         --    por lo que el motor de asignación NO reelige el recurso fallido (lo ve como ocupado).
-        PERFORM fn_asignar_recursos_incidente(NEW.fk_incidente_id, 1);
+        v_reasignados := fn_asignar_recursos_incidente(NEW.fk_incidente_id, 1);
+        PERFORM fn_registrar_decision('asignacion', NEW.id_asignacion, 'R4/R9',
+            'Falla en asignación #'||NEW.id_asignacion||': recurso '||NEW.fk_recurso_id||' penalizado y reasignados '||v_reasignados||' recurso(s).');
 
         -- c) Cerrar la asignación fallida para liberar lógicamente al recurso.
         --    Este UPDATE re-dispara el trigger (pasada 2), pero con OLD.estado_exito = FALSE,
@@ -369,6 +377,11 @@ BEGIN
                   FROM EstadoIncidente
                   WHERE nombre IN ('Resuelto', 'Cancelado')
               );
+            GET DIAGNOSTICS v_cerrados = ROW_COUNT;
+            IF v_cerrados > 0 THEN
+                PERFORM fn_registrar_decision('incidente', NEW.fk_incidente_id, 'R7',
+                    'Incidente resuelto automáticamente: todas las asignaciones finalizadas con al menos un éxito.');
+            END IF;
         END IF;
 
     END IF;
@@ -425,7 +438,27 @@ $$ LANGUAGE plpgsql;
 
 
 -- ============================================================================
--- 2. fn_auditoria — R3 (auditoría genérica, un trigger por tabla)
+-- 2. fn_registrar_decision — R18 (registro de decisiones automáticas)
+-- ============================================================================
+--
+-- R18: registro de decisiones automáticas. Cada regla activa que decide con un criterio
+-- deja una fila en Log con operacion 'DECISION' y detalle {regla, motivo}. Convive con
+-- fn_auditoria (R19). Consulta de decisiones: SELECT ... FROM Log WHERE operacion = 'DECISION'.
+
+CREATE OR REPLACE FUNCTION fn_registrar_decision(
+    p_tabla   VARCHAR,
+    p_id      BIGINT,
+    p_regla   VARCHAR,
+    p_motivo  TEXT
+) RETURNS VOID AS $$
+    INSERT INTO Log (tablaAfectada, idTablaAfectada, operacion, trigger_disparador, detalle)
+    VALUES (p_tabla, p_id, 'DECISION', p_regla,
+            jsonb_build_object('regla', p_regla, 'motivo', p_motivo));
+$$ LANGUAGE sql;
+
+
+-- ============================================================================
+-- 3. fn_auditoria — R3 (auditoría genérica, un trigger por tabla)
 -- ============================================================================
 --
 -- Recibe el nombre de la columna PK de cada tabla como TG_ARGV[0].
@@ -503,7 +536,7 @@ EXECUTE FUNCTION fn_auditoria('id_evento');
 
 
 -- ============================================================================
--- 3. fn_evento_promocion + trg_evento_promocion — R21
+-- 4. fn_evento_promocion + trg_evento_promocion — R21
 -- ============================================================================
 --
 -- Evalúa la confianza del sensor que generó el evento.
@@ -538,17 +571,8 @@ BEGIN
     -- Sensor no confiable: registramos en Log y no promovemos
     -- -------------------------------------------------------------------------
     IF v_confianza <= v_umbral THEN
-        INSERT INTO Log (tablaAfectada, idTablaAfectada, operacion, trigger_disparador, detalle)
-        VALUES (
-            'evento',
-            NEW.id_evento,
-            'INSERT',
-            TG_NAME,
-            jsonb_build_object(
-                'confianza', v_confianza,
-                'motivo',    'Evento de baja fiabilidad, no se promueve a incidente'
-            )
-        );
+        PERFORM fn_registrar_decision('evento', NEW.id_evento, 'R21',
+            'Evento de baja fiabilidad (confianza '||v_confianza||'), no se promueve a incidente.');
         RETURN NEW;
     END IF;
 
@@ -601,33 +625,17 @@ BEGIN
                 'Incidente generado automáticamente a partir del evento #' || NEW.id_evento,
                 v_gravedad_id   -- baseline/placeholder hasta R12
             );
+            PERFORM fn_registrar_decision('evento', NEW.id_evento, 'R21',
+                'Evento promovido a incidente (confianza '||v_confianza||' > umbral '||v_umbral||', mapeo único).');
         EXCEPTION WHEN OTHERS THEN
-            INSERT INTO Log (tablaAfectada, idTablaAfectada, operacion, trigger_disparador, detalle)
-            VALUES (
-                'Evento',
-                NEW.id_evento,
-                'INSERT',
-                TG_NAME,
-                jsonb_build_object(
-                    'motivo', 'No se pudo crear el incidente automático',
-                    'error',  SQLERRM
-                )
-            );
+            PERFORM fn_registrar_decision('evento', NEW.id_evento, 'R21',
+                'No se pudo crear el incidente automático: '||SQLERRM);
         END;
 
     ELSE
         -- 0 o >1 mapeos: no es posible determinar un incidente unívoco
-        INSERT INTO Log (tablaAfectada, idTablaAfectada, operacion, trigger_disparador, detalle)
-        VALUES (
-            'evento',
-            NEW.id_evento,
-            'INSERT',
-            TG_NAME,
-            jsonb_build_object(
-                'cant_mapeos', v_cant_mapeos,
-                'motivo',      'Evento no promovido: mapeo a tipo de incidente no es único'
-            )
-        );
+        PERFORM fn_registrar_decision('evento', NEW.id_evento, 'R21',
+            'Evento no promovido: '||v_cant_mapeos||' mapeo(s) a tipo de incidente (no es único).');
     END IF;
 
     RETURN NEW;
