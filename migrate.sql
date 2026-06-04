@@ -43,4 +43,6 @@
 
 -- 7. Procedimientos Almacenados (P1/P2/P3/P4/P5)
 \ir database/store-procedures/asignar-recurso.sql
+\ir database/store-procedures/cerrar-incidente.sql
+\ir database/store-procedures/simular-eventos.sql
 
