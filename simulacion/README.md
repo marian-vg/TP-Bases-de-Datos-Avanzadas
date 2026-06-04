@@ -91,21 +91,26 @@ Hallazgos principales:
 - `reglas-temporales.sql` se carga y permite validar R16/P2 y R17.
 - R20 controla la capacidad mediante un umbral propio de cada zona.
 - P4 calcula penalizaciones proporcionales por exceso sobre el SLA.
-- P1 se conserva como procedimiento adicional. P3 y P5 no existen.
+- P1 se conserva y se prueba mediante una asignacion diferida. P3 y P5 no existen.
 - R6 no esta implementada.
 - El bloqueo por acumulacion de penalizaciones no esta implementado en los modulos cargados.
-- Algunos comentarios y tests todavia describen R12, R13 y R15 como pendientes, aunque
-  actualmente poseen implementacion modular.
+- R18 registra varias decisiones centrales, pero no cada accion de todas las reglas activas.
+- R19 ofrece historial de auditoria y decisiones, pero no registra cada ejecucion de trigger.
+- R20 usa `Pendiente` como espera operativa porque el catalogo no contiene `En espera`.
+- R16 y R17 funcionan al invocar sus procedimientos, pero no incluyen un planificador temporal.
 
 ## Estado esperado de cobertura
 
 La matriz final se calcula contra los objetos realmente instalados y la evidencia de la
-corrida. La suite demuestra R16, R17, R20, P2 y P4 de forma funcional. En la migracion
-actual se esperan brechas visibles solo para:
+corrida. La suite demuestra el mecanismo funcional de R16, R17, R20, P1, P2 y P4, y
+distingue los cumplimientos parciales. En la migracion actual se esperan brechas visibles para:
 
 - R6: generacion de incidentes relacionados.
 - P3/P5: procedimientos ausentes.
 - Bloqueo automatico por penalizaciones acumuladas.
+- R18/R19: cobertura parcial de decisiones y ejecuciones.
+- R20: capacidad implementada, pero sin el estado literal `En espera`.
+- R16/R17: procedimientos disponibles sin planificador integrado.
 
 Estas brechas se reportan como `XFAIL`; no se implementan dentro de la simulacion porque
 eso produciria una demostracion engañosa del motor.

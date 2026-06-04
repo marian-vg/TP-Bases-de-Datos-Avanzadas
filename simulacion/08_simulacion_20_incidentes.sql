@@ -17,16 +17,26 @@ DECLARE
     v_pendientes INT;
     v_rebalanceos INT;
 BEGIN
-    WITH combinaciones AS (
+    WITH pares AS (
         SELECT
             row_number() OVER (ORDER BY ti.id_tipo_incidente, z.id_zona)::int AS numero,
             ti.id_tipo_incidente,
-            z.id_zona,
-            ((row_number() OVER (ORDER BY ti.id_tipo_incidente, z.id_zona) - 1) % 5 + 1)::int AS id_gravedad
+            z.id_zona
         FROM TipoIncidente ti
         CROSS JOIN Zona z
         ORDER BY ti.id_tipo_incidente, z.id_zona
         LIMIT 20
+    ),
+    combinaciones AS (
+        SELECT p.numero, p.id_tipo_incidente, p.id_zona, g.id_gravedad
+        FROM pares p
+        JOIN LATERAL (
+            SELECT id_gravedad
+            FROM Gravedad
+            ORDER BY id_gravedad
+            OFFSET ((p.numero - 1) % (SELECT count(*) FROM Gravedad))::int
+            LIMIT 1
+        ) g ON TRUE
     ),
     insertados AS (
         INSERT INTO Incidente (

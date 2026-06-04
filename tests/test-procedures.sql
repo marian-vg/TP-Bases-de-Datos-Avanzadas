@@ -160,7 +160,7 @@ BEGIN
     -- 5. Aserción de resultados esperados:
     --   - Deben haberse asignado 2 recursos.
     --   - El incidente debe haber pasado a 'En proceso'.
-    --   - Los recursos asignados deben estar ahora 'Ocupado'.
+    --   - Los recursos asignados deben estar ahora 'En tránsito' hasta registrar el arribo.
     SELECT COUNT(*) INTO v_n_asig FROM Asignacion WHERE fk_incidente_id = v_incidente AND timestamp_finalizacion IS NULL;
     IF v_n_asig <> 2 THEN
         RAISE EXCEPTION 'FALLO: sp_AsignarRecurso debía asignar 2 recursos, asignó %', v_n_asig;
@@ -175,10 +175,10 @@ BEGIN
     FROM Asignacion a
     JOIN Recurso r ON a.fk_recurso_id = r.id_recurso
     JOIN EstadoRecurso er ON r.fk_estado_recurso_id = er.id_estado_recurso
-    WHERE a.fk_incidente_id = v_incidente AND er.nombre = 'Ocupado';
+    WHERE a.fk_incidente_id = v_incidente AND er.nombre = 'En tránsito';
 
     IF v_n_asig <> 2 THEN
-        RAISE EXCEPTION 'FALLO: Los recursos asignados debían quedar en estado "Ocupado", pero solo hay %', v_n_asig;
+        RAISE EXCEPTION 'FALLO: Los recursos asignados debían quedar "En tránsito", pero solo hay %', v_n_asig;
     END IF;
 
     RAISE NOTICE 'ÉXITO: Se asignaron los recursos en forma diferida y cambió correctamente el estado del incidente.';

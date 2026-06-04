@@ -26,8 +26,9 @@ VALUES
     ('R15', 'R15 asignacion global'),
     ('R16', 'R16 escalamiento por SLA'),
     ('R17', 'R17 reactivacion temporal'),
-    ('R18', 'R18 log de rebalanceo'),
-    ('R20', 'R20 capacidad por zona'),
+    ('R18', 'R18 decisiones parciales'),
+    ('R19', 'R19 ejecuciones parciales'),
+    ('R20', 'R20 estado En espera'),
     ('R21', 'R21 promocion confiable');
 
 UPDATE sim_cobertura c
@@ -45,8 +46,11 @@ WHERE c.codigo = m.codigo;
 
 UPDATE sim_cobertura
 SET estado = 'PASS',
-    detalle = 'sp_AsignarRecurso instalado y disponible para asignacion diferida.'
-WHERE codigo = 'P1' AND objeto_instalado;
+    detalle = r.detalle
+FROM sim_resultado r
+WHERE codigo = 'P1'
+  AND r.prueba = 'P1 asignacion diferida'
+  AND r.estado = 'PASS';
 
 UPDATE sim_cobertura c
 SET estado = r.estado,
@@ -63,13 +67,6 @@ CROSS JOIN LATERAL (
     LIMIT 1
 ) r
 WHERE c.codigo = m.codigo;
-
-UPDATE sim_cobertura
-SET estado = 'PASS',
-    detalle = 'La vista de historial de triggers esta instalada y contiene evidencia.'
-WHERE codigo = 'R19'
-  AND objeto_instalado
-  AND EXISTS (SELECT 1 FROM vHistorialTriggers);
 
 \echo ''
 \echo '============================================================'
@@ -185,7 +182,7 @@ ORDER BY intervenciones DESC, r.puntaje DESC, r.id_recurso
 LIMIT 10;
 
 \echo ''
-\echo '--- PENALIZACIONES Y DECISIONES AVANZADAS ---'
+\echo '--- PENALIZACIONES OBSERVADAS EN EL LOTE FINAL ---'
 SELECT
     p.id_penalizacion,
     p.fk_recurso_id AS recurso,
@@ -197,7 +194,7 @@ JOIN TipoPenalizacion tp ON tp.id_tipo_penalizacion = p.fk_tipo_penalizacion_id
 ORDER BY p.id_penalizacion;
 
 \echo ''
-\echo '--- DECISIONES AUTOMATICAS R1/R4/R7/R15/R20/R21/P4 ---'
+\echo '--- DECISIONES AUTOMATICAS OBSERVADAS EN EL LOTE FINAL ---'
 SELECT
     trigger_disparador AS regla,
     tablaAfectada AS entidad,

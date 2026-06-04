@@ -181,6 +181,53 @@ SELECT pg_temp.sim_reset_operativo();
 
 DO $$
 DECLARE
+    v_pendiente INT := pg_temp.sim_id_catalogo('EstadoIncidente', 'id_estado_incidente', 'Pendiente');
+    v_tipo INT := pg_temp.sim_id_catalogo('TipoIncidente', 'id_tipo_incidente', 'Emergencia médica');
+    v_baja INT := pg_temp.sim_id_catalogo('Gravedad', 'id_gravedad', 'Baja');
+    v_zona INT;
+    v_umbral_base INT;
+    v_incidente INT;
+    v_estado TEXT;
+BEGIN
+    SELECT zr.id_zona INTO v_zona
+    FROM ZonaRecurso zr
+    JOIN Recurso r ON r.id_recurso = zr.id_recurso
+    JOIN EstadoRecurso er ON er.id_estado_recurso = r.fk_estado_recurso_id
+    JOIN TipoIncidenteTipoRecurso x ON x.fk_tipo_recurso_id = r.fk_tipo_recurso_id
+    WHERE x.fk_tipo_incidente_id = v_tipo AND er.nombre = 'Disponible'
+    ORDER BY zr.id_zona
+    LIMIT 1;
+    SELECT umbral_incidentes_activos INTO v_umbral_base FROM Zona WHERE id_zona = v_zona;
+    UPDATE Zona SET umbral_incidentes_activos = 0 WHERE id_zona = v_zona;
+
+    INSERT INTO Incidente (
+        fk_tipo_incidente_id, fk_gravedad_id, fk_estado_incidente_id,
+        fk_zona_id, descripcion, prioridad
+    )
+    VALUES (v_tipo, v_baja, v_pendiente, v_zona, 'SIM-PRO-07 asignacion diferida P1', 0)
+    RETURNING id_incidente INTO v_incidente;
+
+    UPDATE Zona SET umbral_incidentes_activos = v_umbral_base WHERE id_zona = v_zona;
+    CALL sp_AsignarRecurso(v_incidente);
+    SELECT ei.nombre INTO v_estado
+    FROM Incidente i
+    JOIN EstadoIncidente ei ON ei.id_estado_incidente = i.fk_estado_incidente_id
+    WHERE i.id_incidente = v_incidente;
+
+    PERFORM pg_temp.sim_afirmar('07-AVANZADAS', 'P1 asignacion diferida',
+        v_estado = 'En proceso'
+        AND EXISTS (SELECT 1 FROM Asignacion WHERE fk_incidente_id = v_incidente),
+        'P1 recupero un incidente pendiente y le asigno un recurso.',
+        'P1 no pudo recuperar el incidente pendiente.');
+EXCEPTION WHEN OTHERS THEN
+    PERFORM pg_temp.sim_capturar_error('07-AVANZADAS', 'Procedimiento P1', SQLERRM);
+END;
+$$;
+
+SELECT pg_temp.sim_reset_operativo();
+
+DO $$
+DECLARE
     v_codigo TEXT;
     v_instalado BOOLEAN;
     v_recurso INT;
@@ -199,6 +246,19 @@ BEGIN
         PERFORM pg_temp.sim_brecha('07-BRECHAS', v_codigo || ' ausente', NOT v_instalado,
             'Capacidad requerida no instalada.', 'La capacidad ahora aparece instalada; revisar cobertura.');
     END LOOP;
+
+    PERFORM pg_temp.sim_brecha('07-BRECHAS', 'R18 decisiones parciales',
+        TRUE,
+        'Se registran decisiones importantes, pero no cada accion de todas las reglas activas.',
+        'Todas las reglas activas registran sus decisiones.');
+    PERFORM pg_temp.sim_brecha('07-BRECHAS', 'R19 ejecuciones parciales',
+        TRUE,
+        'El historial contiene auditoria y decisiones, pero no cada ejecucion de todos los triggers.',
+        'Cada ejecucion de trigger queda registrada.');
+    PERFORM pg_temp.sim_brecha('07-BRECHAS', 'R16/R17 planificador externo',
+        TRUE,
+        'Los procedimientos temporales funcionan, pero requieren cron o invocacion externa.',
+        'Las reglas temporales poseen planificador integrado.');
 
     SELECT id_recurso INTO v_recurso FROM Recurso ORDER BY id_recurso LIMIT 1;
     SELECT numero INTO v_umbral

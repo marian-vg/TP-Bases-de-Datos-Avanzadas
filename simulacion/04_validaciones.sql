@@ -35,9 +35,10 @@ BEGIN
         'La doble asignacion fue bloqueada.', 'Se permitio una doble asignacion.');
 
     SELECT r.id_recurso INTO v_otro FROM Recurso r
+    JOIN EstadoRecurso er ON er.id_estado_recurso = r.fk_estado_recurso_id
     JOIN ZonaRecurso zr ON zr.id_recurso = r.id_recurso AND zr.id_zona = v_zona
     JOIN TipoIncidenteTipoRecurso x ON x.fk_tipo_recurso_id = r.fk_tipo_recurso_id AND x.fk_tipo_incidente_id = v_tipo
-    WHERE r.id_recurso <> v_recurso AND r.fk_estado_recurso_id <> v_fuera
+    WHERE r.id_recurso <> v_recurso AND er.nombre = 'Disponible'
     ORDER BY r.id_recurso LIMIT 1;
     UPDATE Recurso SET fk_estado_recurso_id = v_fuera WHERE id_recurso = v_otro;
     v_bloqueado := FALSE;

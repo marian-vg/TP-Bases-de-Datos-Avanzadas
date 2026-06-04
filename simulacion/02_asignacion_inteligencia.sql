@@ -19,15 +19,27 @@ BEGIN
     FROM Zona z
     JOIN NivelRiesgo nr ON nr.id_nivel_riesgo = z.fk_nivel_riesgo_id
     WHERE nr.valor >= 3
+      AND EXISTS (
+          SELECT 1
+          FROM Recurso r
+          JOIN EstadoRecurso er ON er.id_estado_recurso = r.fk_estado_recurso_id
+          JOIN ZonaRecurso zr ON zr.id_recurso = r.id_recurso AND zr.id_zona = z.id_zona
+          JOIN TipoIncidenteTipoRecurso titr
+            ON titr.fk_tipo_recurso_id = r.fk_tipo_recurso_id
+           AND titr.fk_tipo_incidente_id = v_tipo
+          WHERE er.nombre = 'Disponible'
+      )
     ORDER BY nr.valor DESC, z.id_zona
     LIMIT 1;
 
     SELECT r.id_recurso INTO v_mejor
     FROM Recurso r
+    JOIN EstadoRecurso er ON er.id_estado_recurso = r.fk_estado_recurso_id
     JOIN ZonaRecurso zr ON zr.id_recurso = r.id_recurso AND zr.id_zona = v_zona
     JOIN TipoIncidenteTipoRecurso titr
       ON titr.fk_tipo_recurso_id = r.fk_tipo_recurso_id
      AND titr.fk_tipo_incidente_id = v_tipo
+    WHERE er.nombre = 'Disponible'
     ORDER BY r.id_recurso
     LIMIT 1;
 

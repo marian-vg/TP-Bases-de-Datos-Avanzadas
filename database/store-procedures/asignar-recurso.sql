@@ -3,7 +3,7 @@
 --
 -- • Busca recursos disponibles.
 -- • Aplica criterio de selección (tipo compatible y zona habilitada, R14).
--- • Realiza rebalanceo geográfico si faltan recursos en la zona (R15).
+-- • Completa asignaciones pendientes usando recursos ya habilitados en la zona.
 -- • Asigna automáticamente al incidente generado.
 -- ============================================================================
 
