@@ -85,8 +85,16 @@ $$ LANGUAGE sql IMMUTABLE;
 CREATE OR REPLACE FUNCTION fn_asignar_recursos_incidente(p_id_incidente INT, p_cantidad INT)
 RETURNS INT AS $$
 DECLARE
-    v_insertados INT;
+    v_insertados INT := 0;
+    v_actuales INT := 0;
+    v_restantes INT;
+    v_recurso_id INT;
+    v_zona_incidente INT;
 BEGIN
+    -- Obtener la zona del incidente
+    SELECT fk_zona_id INTO v_zona_incidente FROM Incidente WHERE id_incidente = p_id_incidente;
+
+    -- 1. Intentar asignación local (con zona habilitada)
     INSERT INTO Asignacion (fk_recurso_id, fk_incidente_id)
     SELECT r.id_recurso, p_id_incidente
     FROM Recurso r
@@ -108,11 +116,7 @@ BEGIN
           SELECT 1
           FROM ZonaRecurso zr
           WHERE zr.id_recurso = r.id_recurso
-            AND zr.id_zona = (
-                SELECT i.fk_zona_id
-                FROM Incidente i
-                WHERE i.id_incidente = p_id_incidente
-            )
+            AND zr.id_zona = v_zona_incidente
       )
       -- d) sin asignación activa (timestamp_finalizacion IS NULL = en curso)
       AND NOT EXISTS (
@@ -124,7 +128,66 @@ BEGIN
     ORDER BY r.puntaje DESC, r.id_recurso   -- R14: mejor desempeño primero; id_recurso desempata
     LIMIT p_cantidad;
 
-    GET DIAGNOSTICS v_insertados = ROW_COUNT;
+    GET DIAGNOSTICS v_actuales = ROW_COUNT;
+    v_insertados := v_actuales;
+
+    -- 2. R15: Rebalanceo geográfico. Si faltan recursos, buscamos a nivel global (ignorando zona)
+    v_restantes := p_cantidad - v_insertados;
+    IF v_restantes > 0 THEN
+        -- Habilitamos bypass_zona temporalmente en esta transacción para omitir la validación de zona (R10)
+        PERFORM set_config('my.bypass_zona', '1', true);
+
+        FOR v_recurso_id IN
+            SELECT r.id_recurso
+            FROM Recurso r
+            JOIN EstadoRecurso er ON r.fk_estado_recurso_id = er.id_estado_recurso
+            WHERE er.nombre = 'Disponible'
+              -- b) el tipo de recurso debe ser aplicable al tipo del incidente
+              AND EXISTS (
+                  SELECT 1
+                  FROM TipoIncidenteTipoRecurso titr
+                  WHERE titr.fk_tipo_recurso_id   = r.fk_tipo_recurso_id
+                    AND titr.fk_tipo_incidente_id = (
+                        SELECT i.fk_tipo_incidente_id
+                        FROM Incidente i
+                        WHERE i.id_incidente = p_id_incidente
+                    )
+              )
+              -- d) sin asignación activa (timestamp_finalizacion IS NULL = en curso)
+              AND NOT EXISTS (
+                  SELECT 1
+                  FROM Asignacion a
+                  WHERE a.fk_recurso_id = r.id_recurso
+                    AND a.timestamp_finalizacion IS NULL
+              )
+            ORDER BY r.puntaje DESC, r.id_recurso
+            LIMIT v_restantes
+        LOOP
+            INSERT INTO Asignacion (fk_recurso_id, fk_incidente_id)
+            VALUES (v_recurso_id, p_id_incidente);
+
+            -- R18 / R19: Registrar la decisión de rebalanceo geográfico en auditoría
+            INSERT INTO Log (tablaAfectada, idTablaAfectada, operacion, trigger_disparador, detalle)
+            VALUES (
+                'Asignacion',
+                (SELECT currval(pg_get_serial_sequence('Asignacion', 'id_asignacion'))),
+                'INSERT',
+                'fn_asignar_recursos_incidente',
+                jsonb_build_object(
+                    'accion', 'Rebalanceo geográfico (R15)',
+                    'recurso_id', v_recurso_id,
+                    'incidente_id', p_id_incidente,
+                    'motivo', 'Falta de recursos locales disponibles en la zona del incidente'
+                )
+            );
+
+            v_insertados := v_insertados + 1;
+        END LOOP;
+
+        -- Restauramos el valor del bypass
+        PERFORM set_config('my.bypass_zona', '', true);
+    END IF;
+
     RETURN v_insertados;
 END;
 $$ LANGUAGE plpgsql;
