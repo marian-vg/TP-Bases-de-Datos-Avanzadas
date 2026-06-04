@@ -94,7 +94,7 @@ BEGIN
             'El recurso fuera de zona fue rechazado.', 'Se asigno un recurso fuera de su zona habilitada.');
     END IF;
 
-    UPDATE ParametrosSistema SET numero = 0 WHERE nombre_parametro = 'UMBRAL_RECURSOS_ACTIVOS';
+    UPDATE Zona SET umbral_incidentes_activos = 0 WHERE id_zona = v_zona;
     INSERT INTO Incidente (fk_tipo_incidente_id, fk_gravedad_id, fk_estado_incidente_id, fk_zona_id, descripcion, prioridad)
     SELECT ti.id_tipo_incidente, v_baja, v_pendiente, v_zona, 'SIM-PRO-04 estado invalido', 0
     FROM TipoIncidente ti WHERE ti.nombre <> 'Accidente de tránsito' ORDER BY ti.id_tipo_incidente LIMIT 1

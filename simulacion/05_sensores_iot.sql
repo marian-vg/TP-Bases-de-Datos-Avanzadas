@@ -29,7 +29,11 @@ BEGIN
         INSERT INTO Evento (fk_sensor_id, fk_tipo_evento_id) VALUES (v_sensor_alto, v_evento_unico) RETURNING id_evento INTO v_evento_2;
         PERFORM pg_temp.sim_afirmar('05-IOT', 'R11 duplicado desde IoT',
             NOT EXISTS (SELECT 1 FROM Incidente WHERE fk_evento_id = v_evento_2)
-            AND EXISTS (SELECT 1 FROM Log WHERE idTablaAfectada = v_evento_2 AND detalle ? 'error'),
+            AND EXISTS (
+                SELECT 1 FROM Log
+                WHERE idTablaAfectada = v_evento_2
+                  AND detalle->>'motivo' ILIKE '%No se pudo crear el incidente%'
+            ),
             'El segundo evento quedo registrado sin duplicar incidente.', 'El duplicado IoT no fue gestionado correctamente.');
     END IF;
 

@@ -42,6 +42,10 @@ CREATE TEMP TABLE sim_zona_recurso_base ON COMMIT DROP AS
 SELECT id_zona, id_recurso
 FROM ZonaRecurso;
 
+CREATE TEMP TABLE sim_zonas_base ON COMMIT DROP AS
+SELECT id_zona, umbral_incidentes_activos
+FROM Zona;
+
 CREATE TEMP TABLE sim_conteos_base (
     tabla TEXT PRIMARY KEY,
     cantidad BIGINT NOT NULL
@@ -224,6 +228,12 @@ BEGIN
         WHERE b.nombre_parametro = p.nombre_parametro
     );
 
+    UPDATE Zona z
+    SET umbral_incidentes_activos = b.umbral_incidentes_activos
+    FROM sim_zonas_base b
+    WHERE z.id_zona = b.id_zona
+      AND z.umbral_incidentes_activos IS DISTINCT FROM b.umbral_incidentes_activos;
+
     UPDATE Recurso r
     SET fk_estado_recurso_id = b.fk_estado_recurso_id,
         puntaje = b.puntaje
@@ -299,12 +309,12 @@ VALUES
     ('R12', 'Priorizacion por gravedad', 'trg_prioridad_incidente'),
     ('R13', 'Priorizacion por zona de riesgo', 'trg_prioridad_incidente'),
     ('R14', 'Seleccion del mejor recurso', 'fn_asignar_recursos_incidente'),
-    ('R15', 'Rebalanceo de recursos', 'fn_asignar_recursos_incidente'),
+    ('R15', 'Rebalanceo de recursos', 'fn_rebalancear_zona'),
     ('R16', 'Control temporal de SLA', 'sp_escalarincidente'),
     ('R17', 'Reactivacion automatica de recursos', 'sp_reactivarrecursos'),
     ('R18', 'Registro de decisiones automaticas', 'Log'),
     ('R19', 'Log de ejecucion de triggers', 'vHistorialTriggers'),
-    ('R20', 'Control de capacidad del sistema', 'trg_control_capacidad'),
+    ('R20', 'Control de capacidad del sistema', 'trg_asignacion_automatica'),
     ('R21', 'Confiabilidad de sensores', 'trg_evento_promocion'),
     ('P1',  'sp_AsignarRecurso', 'sp_asignarrecurso'),
     ('P2',  'sp_EscalarIncidente', 'sp_escalarincidente'),

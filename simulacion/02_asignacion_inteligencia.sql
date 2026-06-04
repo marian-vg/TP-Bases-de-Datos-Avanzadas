@@ -50,11 +50,12 @@ BEGIN
         'Gravedad Alta genero dos asignaciones.', format('Se esperaban 2 asignaciones y se obtuvieron %s.', v_asignaciones));
     PERFORM pg_temp.sim_afirmar('02-ASIGNACION', 'R2 estado En proceso', v_estado = 'En proceso',
         'El incidente paso automaticamente a En proceso.', format('Estado obtenido: %s.', v_estado));
-    PERFORM pg_temp.sim_afirmar('02-ASIGNACION', 'R8 recursos Ocupado',
+    PERFORM pg_temp.sim_afirmar('02-ASIGNACION', 'R8 recursos En transito',
         (SELECT count(*) = v_asignaciones FROM Asignacion a JOIN Recurso r ON r.id_recurso = a.fk_recurso_id
          JOIN EstadoRecurso er ON er.id_estado_recurso = r.fk_estado_recurso_id
-         WHERE a.fk_incidente_id = v_incidente AND er.nombre = 'Ocupado'),
-        'Todos los recursos asignados quedaron Ocupado.', 'No todos los recursos asignados quedaron Ocupado.');
+         WHERE a.fk_incidente_id = v_incidente AND er.nombre = 'En tránsito'),
+        'Todos los recursos asignados quedaron En transito antes del arribo.',
+        'No todos los recursos asignados quedaron En transito.');
     PERFORM pg_temp.sim_afirmar('02-ASIGNACION', 'R12/R13 prioridad',
         v_prioridad = v_alta * 10 + COALESCE(v_bonus, 10),
         format('Prioridad calculada correctamente: %s.', v_prioridad),

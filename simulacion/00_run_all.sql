@@ -16,7 +16,7 @@ BEGIN;
 \ir 04_validaciones.sql
 \ir 05_sensores_iot.sql
 \ir 06_saturacion_rebalanceo.sql
-\ir 07_brechas_conocidas.sql
+\ir 07_capacidades_avanzadas.sql
 \ir 08_simulacion_20_incidentes.sql
 \ir 09_reporte_operativo.sql
 
