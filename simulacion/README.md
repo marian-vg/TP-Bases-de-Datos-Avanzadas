@@ -1,13 +1,16 @@
 # Simulacion profesional Smart City
 
-Esta carpeta contiene una suite transaccional para demostrar el comportamiento real del
-sistema de emergencias. Reemplaza las demostraciones manuales anteriores por escenarios
-con aserciones, metricas, cobertura y un reporte final.
+Esta carpeta contiene la suite transaccional usada para mostrar el comportamiento real del
+sistema de emergencias.
+
+La idea de fondo es simple: dejar atras las simulaciones manuales y pasar a una corrida
+ordenada, con aserciones, metricas, cobertura y un reporte final que permita ver con
+claridad que funciona, que falla y que sigue faltando.
 
 ## Objetivo
 
 La consigna pide demostrar casos basicos, intermedios, avanzados y un minimo de veinte
-incidentes simultaneos. La suite verifica esos flujos sin ocultar capacidades ausentes:
+incidentes simultaneos. Esta suite cubre esos flujos sin ocultar capacidades ausentes:
 
 - `PASS`: el comportamiento requerido fue observado.
 - `FAIL`: ocurrio una regresion o un resultado inesperado.
@@ -16,7 +19,8 @@ incidentes simultaneos. La suite verifica esos flujos sin ocultar capacidades au
 - `SKIP`: no pudo ejecutarse la prueba porque falta una dependencia.
 - `INFO`: diagnostico sin criterio de aprobacion.
 
-Solo `FAIL` provoca un codigo de salida no exitoso.
+Solo `FAIL` provoca un codigo de salida no exitoso. La idea es que una brecha real del
+motor quede visible, pero no rompa toda la corrida como si fuera un error tecnico de la suite.
 
 ## Ejecucion
 
@@ -34,9 +38,11 @@ psql -v ON_ERROR_STOP=1 -h localhost -p 5433 -U postgres -d smart_city -f simula
 ```
 
 El runner abre una transaccion, toma snapshots temporales, ejecuta todos los escenarios,
-imprime el reporte y termina con `ROLLBACK`. Ningun incidente, recurso, parametro,
-umbral por zona, puntaje, permiso de zona, log ni avance de secuencia generado por la simulacion queda
-persistido. Las secuencias se restauran explicitamente porque PostgreSQL no las revierte
+imprime el reporte y termina con `ROLLBACK`.
+
+Eso significa que ningun incidente, recurso, parametro, umbral por zona, puntaje, permiso
+de zona, log ni avance de secuencia generado por la simulacion queda persistido. Las
+secuencias se restauran en forma explicita porque PostgreSQL no las revierte
 automaticamente con `ROLLBACK`.
 
 Durante la corrida se modifican filas y se toman locks dentro de la sesion. Por eso no debe
@@ -54,9 +60,10 @@ Sensor -> Evento -> Incidente -> Asignacion -> En transito -> Ocupado -> Resoluc
                          +-> prioridad, capacidad por zona, SLA y rebalanceo
 ```
 
-`lib/harness.sql` crea tablas y funciones temporales para resultados, metricas, cobertura,
-resolucion dinamica de catalogos y restauracion entre escenarios. Los scripts numerados se
-incluyen desde `00_run_all.sql`; el reporte se imprime antes del rollback.
+`lib/harness.sql` crea las tablas y funciones temporales que sostienen toda la corrida:
+resultados, metricas, cobertura, resolucion dinamica de catalogos y restauracion entre
+escenarios. Los scripts numerados se incluyen desde `00_run_all.sql`; el reporte se imprime
+antes del rollback.
 
 ## Escenarios
 
@@ -73,15 +80,15 @@ incluyen desde `00_run_all.sql`; el reporte se imprime antes del rollback.
 | `09_reporte_operativo.sql` | Veredicto, cobertura, SLA, ranking, auditoria y brechas |
 
 La rafaga obligatoria usa un unico `INSERT` de veinte filas con pares tipo/zona unicos.
-Esto representa simultaneidad logica y ejercita triggers fila a fila. No reemplaza una
+Eso representa simultaneidad logica y ejercita triggers fila a fila. No reemplaza una
 prueba de concurrencia real con dos conexiones.
 
 ## Auditoria del repositorio
 
-La revision comparo la consigna, migracion, Docker, esquema, dataset, reglas modulares,
-procedimientos, vistas, tests y simulaciones anteriores.
+La revision comparo la consigna, la migracion, Docker, el esquema, el dataset, las reglas
+modulares, los procedimientos, las vistas, los tests y las simulaciones anteriores.
 
-Hallazgos principales:
+Los hallazgos principales fueron estos:
 
 - Las simulaciones anteriores borraban globalmente datos, usaban IDs magicos y no fallaban
   cuando el resultado era incorrecto.
@@ -103,7 +110,8 @@ Hallazgos principales:
 
 La matriz final se calcula contra los objetos realmente instalados y la evidencia de la
 corrida. La suite demuestra el mecanismo funcional de R16, R17, R20, P1, P2 y P4, y
-distingue los cumplimientos parciales. En la migracion actual se esperan brechas visibles para:
+tambien distingue los cumplimientos parciales. En la migracion actual se esperan brechas
+visibles para:
 
 - R6: generacion de incidentes relacionados.
 - P3/P5: procedimientos ausentes.
@@ -113,11 +121,11 @@ distingue los cumplimientos parciales. En la migracion actual se esperan brechas
 - R16/R17: procedimientos disponibles sin planificador integrado.
 
 Estas brechas se reportan como `XFAIL`; no se implementan dentro de la simulacion porque
-eso produciria una demostracion engañosa del motor.
+eso terminaria mostrando un sistema mas completo de lo que realmente es.
 
 ## Lectura del reporte
 
-Para una defensa oral, leer el reporte en este orden:
+Para una defensa oral, conviene leer el reporte en este orden:
 
 1. Veredicto general y resumen de aserciones.
 2. Tablero ejecutivo con pruebas, capacidades, decisiones y lote obligatorio.
@@ -128,5 +136,5 @@ Para una defensa oral, leer el reporte en este orden:
 7. Brechas conocidas.
 
 Un resultado `PASS CON BRECHAS CONOCIDAS` significa que la suite se ejecuto correctamente,
-las capacidades implementadas respondieron como se esperaba y las ausencias conocidas
-quedaron demostradas de forma honesta.
+que las capacidades implementadas respondieron como se esperaba y que las ausencias
+conocidas quedaron expuestas de forma honesta.
