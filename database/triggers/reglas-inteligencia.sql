@@ -22,24 +22,42 @@
 CREATE OR REPLACE FUNCTION fn_puntaje_por_penalizacion()
 RETURNS TRIGGER AS $$
 DECLARE
-    v_resta INT;
+    v_resta_old INT := 0;
+    v_resta_new INT := 0;
 BEGIN
-    SELECT COALESCE(NEW.puntaje, tp.puntaje, 0)
-    INTO v_resta
-    FROM TipoPenalizacion tp
-    WHERE tp.id_tipo_penalizacion = NEW.fk_tipo_penalizacion_id;
+    -- La penalización puede recalcularse (P4) o eliminarse si timestamp_llegada cambia.
+    -- Por eso el puntaje se mantiene por delta: devolver lo anterior y aplicar lo nuevo.
+    IF TG_OP IN ('UPDATE', 'DELETE') THEN
+        SELECT COALESCE(OLD.puntaje, tp.puntaje, 0)
+        INTO v_resta_old
+        FROM TipoPenalizacion tp
+        WHERE tp.id_tipo_penalizacion = OLD.fk_tipo_penalizacion_id;
 
-    UPDATE Recurso
-    SET puntaje = puntaje - v_resta
-    WHERE id_recurso = NEW.fk_recurso_id;
+        UPDATE Recurso
+        SET puntaje = puntaje + COALESCE(v_resta_old, 0)
+        WHERE id_recurso = OLD.fk_recurso_id;
+    END IF;
 
-    RETURN NEW;
+    IF TG_OP IN ('INSERT', 'UPDATE') THEN
+        SELECT COALESCE(NEW.puntaje, tp.puntaje, 0)
+        INTO v_resta_new
+        FROM TipoPenalizacion tp
+        WHERE tp.id_tipo_penalizacion = NEW.fk_tipo_penalizacion_id;
+
+        UPDATE Recurso
+        SET puntaje = puntaje - COALESCE(v_resta_new, 0)
+        WHERE id_recurso = NEW.fk_recurso_id;
+
+        RETURN NEW;
+    END IF;
+
+    RETURN OLD;
 END;
 $$ LANGUAGE plpgsql;
 
 DROP TRIGGER IF EXISTS trg_puntaje_por_penalizacion ON Penalizacion;
 CREATE TRIGGER trg_puntaje_por_penalizacion
-AFTER INSERT ON Penalizacion
+AFTER INSERT OR UPDATE OR DELETE ON Penalizacion
 FOR EACH ROW
 EXECUTE FUNCTION fn_puntaje_por_penalizacion();
 

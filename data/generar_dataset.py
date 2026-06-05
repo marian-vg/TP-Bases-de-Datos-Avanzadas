@@ -263,7 +263,6 @@ for recurso_id_x, _, zona_base, _ in recursos:
 # 6. ParametrosSistema (parámetros configurables del sistema)
 # =============================================================================
 parametros = [
-    ("UMBRAL_INCIDENTES_ACTIVOS",            "50"),   # R20: capacidad del sistema
     ("MAX_RECURSOS_POR_INCIDENTE",           "5"),
     ("MIN_RECURSOS_INCIDENTE_CRITICO",       "2"),    # R5: asignación múltiple
     ("PUNTAJE_BLOQUEO_RECURSO",              "75"),   # bloquear recurso si suma X puntos

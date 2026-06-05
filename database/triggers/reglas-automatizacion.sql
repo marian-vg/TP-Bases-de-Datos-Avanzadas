@@ -155,27 +155,7 @@ DECLARE
     v_en_atencion INT;
     v_tipo        INT;
     v_asignados   INT;
-    v_umbral_global INT;
-    v_incidentes_activos_global INT;
 BEGIN
-    -- 0. Control de capacidad global (R20): evitar asignación si el sistema completo está saturado
-    SELECT COALESCE(
-        (SELECT numero FROM ParametrosSistema WHERE nombre_parametro = 'UMBRAL_INCIDENTES_ACTIVOS'),
-        100
-    ) INTO v_umbral_global;
-
-    SELECT count(*)
-    INTO v_incidentes_activos_global
-    FROM Incidente i
-    JOIN EstadoIncidente ei ON i.fk_estado_incidente_id = ei.id_estado_incidente
-    WHERE ei.nombre IN ('Pendiente', 'En proceso', 'Escalado');
-
-    IF v_incidentes_activos_global >= v_umbral_global THEN
-        PERFORM fn_registrar_decision('incidente', NEW.id_incidente, 'R20',
-            'Incidente en espera: sistema al tope de capacidad global ('||v_incidentes_activos_global||'/'||v_umbral_global||').');
-        RETURN NEW;
-    END IF;
-
     -- 1. Control de capacidad por zona (R20): leer el tope configurado en la zona del incidente.
     SELECT umbral_incidentes_activos
     INTO v_umbral
@@ -298,6 +278,7 @@ DECLARE
     v_puntos                     INT;
     v_tipo_penalizacion_id       INT;
     v_tipo_penalizacion_nombre   TEXT;
+    v_afectadas                  INT;
 BEGIN
     SELECT a.fk_recurso_id, a.fk_incidente_id, a.timestamp_asignacion, a.timestamp_llegada,
            s.tiempo_respuesta_minutos, s.minutos_por_punto_demora
@@ -308,16 +289,20 @@ BEGIN
     JOIN SLA s       ON s.fk_gravedad_id = i.fk_gravedad_id
     WHERE a.id_asignacion = p_id_asignacion;
 
-    IF v_recurso_id IS NULL OR v_timestamp_llegada IS NULL THEN
+    IF v_recurso_id IS NULL THEN
         RETURN;
     END IF;
 
-    -- Evitar duplicidad si ya fue penalizado para esta asignación
-    IF EXISTS (
-        SELECT 1 FROM Penalizacion
-        WHERE fk_recurso_id = v_recurso_id
-          AND motivo LIKE '%asignación #' || p_id_asignacion || '%'
-    ) THEN
+    -- Si se borra la llegada, o no hay parámetros válidos, se revierte la P4 previa.
+    IF v_timestamp_llegada IS NULL OR v_minutos_por_punto_demora IS NULL OR v_minutos_por_punto_demora <= 0 THEN
+        DELETE FROM Penalizacion
+        WHERE fk_asignacion_id = p_id_asignacion;
+        GET DIAGNOSTICS v_afectadas = ROW_COUNT;
+
+        IF v_afectadas > 0 THEN
+            PERFORM fn_registrar_decision('recurso', v_recurso_id, 'P4',
+                'Penalización por demora eliminada/recalculada para asignación #'||p_id_asignacion||'.');
+        END IF;
         RETURN;
     END IF;
 
@@ -325,11 +310,27 @@ BEGIN
     v_exceso_minutos := v_minutos_respuesta - v_sla_minutos;
 
     IF v_exceso_minutos <= 0 THEN
+        DELETE FROM Penalizacion
+        WHERE fk_asignacion_id = p_id_asignacion;
+        GET DIAGNOSTICS v_afectadas = ROW_COUNT;
+
+        IF v_afectadas > 0 THEN
+            PERFORM fn_registrar_decision('recurso', v_recurso_id, 'P4',
+                'Arribo dentro del SLA: penalización por demora eliminada para asignación #'||p_id_asignacion||'.');
+        END IF;
         RETURN;
     END IF;
 
     v_puntos := floor(v_exceso_minutos / v_minutos_por_punto_demora);
     IF v_puntos <= 0 THEN
+        DELETE FROM Penalizacion
+        WHERE fk_asignacion_id = p_id_asignacion;
+        GET DIAGNOSTICS v_afectadas = ROW_COUNT;
+
+        IF v_afectadas > 0 THEN
+            PERFORM fn_registrar_decision('recurso', v_recurso_id, 'P4',
+                'Exceso bajo el tramo mínimo: penalización por demora eliminada para asignación #'||p_id_asignacion||'.');
+        END IF;
         RETURN;
     END IF;
 
@@ -348,92 +349,74 @@ BEGIN
         RAISE EXCEPTION 'No existe TipoPenalizacion para %.', v_tipo_penalizacion_nombre;
     END IF;
 
-    INSERT INTO Penalizacion (fk_recurso_id, fk_tipo_penalizacion_id, puntaje, motivo)
+    INSERT INTO Penalizacion (fk_recurso_id, fk_tipo_penalizacion_id, fk_asignacion_id, puntaje, motivo)
     VALUES (
         v_recurso_id,
         v_tipo_penalizacion_id,
+        p_id_asignacion,
         v_puntos,
         'Demora de ' || floor(v_minutos_respuesta)::INT || ' min (' ||
         floor(v_exceso_minutos)::INT || ' sobre SLA) en asignación #' || p_id_asignacion ||
         ' para el incidente #' || v_incidente_id || '.'
-    );
+    )
+    ON CONFLICT (fk_asignacion_id) DO UPDATE
+    SET fk_recurso_id = EXCLUDED.fk_recurso_id,
+        fk_tipo_penalizacion_id = EXCLUDED.fk_tipo_penalizacion_id,
+        puntaje = EXCLUDED.puntaje,
+        motivo = EXCLUDED.motivo,
+        fecha = CURRENT_DATE,
+        hora = CURRENT_TIME;
 
     PERFORM fn_registrar_decision('recurso', v_recurso_id, 'P4',
-        'Demora de ' || floor(v_minutos_respuesta)::INT || ' min (' ||
-        floor(v_exceso_minutos)::INT || ' sobre SLA): -' || v_puntos || ' puntos');
+        'Penalización por demora recalculada para asignación #'||p_id_asignacion||': ' ||
+        floor(v_minutos_respuesta)::INT || ' min (' || floor(v_exceso_minutos)::INT ||
+        ' sobre SLA), -' || v_puntos || ' puntos.');
 END;
 $$;
 
 
 -- =============================================================================================================
--- Trigger de Penalización Automática por Demora (SLA) en Asignacion
+-- Trigger de recálculo P4 y sincronización de arribo por timestamp_llegada
 -- =============================================================================================================
 CREATE OR REPLACE FUNCTION fn_penalizar_demora_asignacion()
 RETURNS TRIGGER AS $$
 DECLARE
-    v_sla_minutos INT;
-    v_minutos_por_punto INT;
-    v_minutos_respuesta NUMERIC;
-    v_exceso NUMERIC;
-    v_puntos INT;
-    v_tipo_penalizacion_id INT;
-    v_tipo_penalizacion_nombre TEXT;
+    v_estado_transito INT;
+    v_estado_ocupado  INT;
 BEGIN
-    -- Se activa solo cuando el recurso llega (timestamp_llegada pasa de ser NULL a un valor real)
-    IF OLD.timestamp_llegada IS NULL AND NEW.timestamp_llegada IS NOT NULL THEN
-
-        -- Evaluamos en base a lo que el incidente nos diga (su gravedad y SLA)
-        SELECT s.tiempo_respuesta_minutos, s.minutos_por_punto_demora
-        INTO v_sla_minutos, v_minutos_por_punto
-        FROM Incidente i
-        JOIN SLA s ON s.fk_gravedad_id = i.fk_gravedad_id
-        WHERE i.id_incidente = NEW.fk_incidente_id;
-
-        IF FOUND AND v_sla_minutos IS NOT NULL THEN
-            v_minutos_respuesta := EXTRACT(EPOCH FROM (NEW.timestamp_llegada - NEW.timestamp_asignacion)) / 60;
-            v_exceso := v_minutos_respuesta - v_sla_minutos;
-
-            -- Detectamos si superó el umbral
-            IF v_exceso > 0 THEN
-                v_puntos := floor(v_exceso / v_minutos_por_punto);
-
-                IF v_puntos > 0 THEN
-                    v_tipo_penalizacion_nombre := CASE
-                        WHEN v_puntos = 1 THEN 'Demora leve'
-                        WHEN v_puntos = 2 THEN 'Demora moderada'
-                        ELSE 'Demora grave'
-                    END;
-
-                    SELECT id_tipo_penalizacion INTO v_tipo_penalizacion_id
-                    FROM TipoPenalizacion
-                    WHERE nombre = v_tipo_penalizacion_nombre;
-
-                    -- Evitar duplicidad si ya fue penalizado para esta asignación
-                    IF NOT EXISTS (
-                        SELECT 1 FROM Penalizacion
-                        WHERE fk_recurso_id = NEW.fk_recurso_id
-                          AND motivo LIKE '%asignación #' || NEW.id_asignacion || '%'
-                    ) THEN
-                        -- Actuamos insertando la penalización
-                        INSERT INTO Penalizacion (fk_recurso_id, fk_tipo_penalizacion_id, puntaje, motivo)
-                        VALUES (
-                            NEW.fk_recurso_id,
-                            v_tipo_penalizacion_id,
-                            v_puntos,
-                            'Demora de ' || floor(v_minutos_respuesta)::INT || ' min (' ||
-                            floor(v_exceso)::INT || ' sobre SLA) en asignación #' || NEW.id_asignacion ||
-                            ' para el incidente #' || NEW.fk_incidente_id || '.'
-                        );
-
-                        -- Decisión auditable
-                        PERFORM fn_registrar_decision('recurso', NEW.fk_recurso_id, 'P4',
-                            'Demora de ' || floor(v_minutos_respuesta)::INT || ' min (' ||
-                            floor(v_exceso)::INT || ' sobre SLA): -' || v_puntos || ' puntos');
-                    END IF;
-                END IF;
-            END IF;
-        END IF;
+    IF OLD.timestamp_llegada IS NOT DISTINCT FROM NEW.timestamp_llegada THEN
+        RETURN NEW;
     END IF;
+
+    -- P4 idempotente: recalcula, actualiza o elimina la penalización asociada a esta asignación.
+    CALL sp_CalcularPenalizacion(NEW.id_asignacion);
+
+    SELECT id_estado_recurso INTO v_estado_transito
+    FROM EstadoRecurso
+    WHERE nombre = 'En tránsito';
+
+    SELECT id_estado_recurso INTO v_estado_ocupado
+    FROM EstadoRecurso
+    WHERE nombre = 'Ocupado';
+
+    -- Si el operador registra llegada editando timestamp_llegada, se interpreta como arribo.
+    IF OLD.timestamp_llegada IS NULL AND NEW.timestamp_llegada IS NOT NULL THEN
+        UPDATE Recurso
+        SET fk_estado_recurso_id = v_estado_ocupado
+        WHERE id_recurso = NEW.fk_recurso_id
+          AND fk_estado_recurso_id = v_estado_transito
+          AND NEW.timestamp_finalizacion IS NULL;
+    END IF;
+
+    -- Si se corrige la llegada a NULL y la asignación sigue abierta, vuelve a estar en tránsito.
+    IF OLD.timestamp_llegada IS NOT NULL AND NEW.timestamp_llegada IS NULL THEN
+        UPDATE Recurso
+        SET fk_estado_recurso_id = v_estado_transito
+        WHERE id_recurso = NEW.fk_recurso_id
+          AND fk_estado_recurso_id = v_estado_ocupado
+          AND NEW.timestamp_finalizacion IS NULL;
+    END IF;
+
     RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;

@@ -233,6 +233,7 @@ CREATE TABLE Penalizacion (
     id_penalizacion SERIAL PRIMARY KEY,
     fk_recurso_id INT NOT NULL,
     fk_tipo_penalizacion_id INT NOT NULL,
+    fk_asignacion_id INT NULL, -- Solo para P4: permite recalcular la penalización por demora sin duplicar puntos si cambia timestamp_llegada.
     fecha DATE NOT NULL DEFAULT CURRENT_DATE,
     hora TIME NOT NULL DEFAULT CURRENT_TIME,
     puntaje INT NULL, -- Puntos reales de esta penalización; NULL usa TipoPenalizacion.puntaje vía COALESCE (R4/R9 conservan el default, P4 calcula proporcional).
@@ -240,7 +241,10 @@ CREATE TABLE Penalizacion (
     CONSTRAINT fk_penalizacion_recurso FOREIGN KEY (fk_recurso_id) 
         REFERENCES Recurso(id_recurso) ON DELETE CASCADE,
     CONSTRAINT fk_penalizacion_tipo FOREIGN KEY (fk_tipo_penalizacion_id) 
-        REFERENCES TipoPenalizacion(id_tipo_penalizacion) ON DELETE RESTRICT
+        REFERENCES TipoPenalizacion(id_tipo_penalizacion) ON DELETE RESTRICT,
+    CONSTRAINT fk_penalizacion_asignacion FOREIGN KEY (fk_asignacion_id)
+        REFERENCES Asignacion(id_asignacion) ON DELETE CASCADE,
+    CONSTRAINT uq_penalizacion_asignacion UNIQUE (fk_asignacion_id)
 );
 
 -- ============================================================================

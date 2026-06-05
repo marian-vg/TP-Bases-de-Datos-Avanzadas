@@ -38,6 +38,23 @@ SELECT setval(pg_get_serial_sequence('asignacion', 'id_asignacion'),   COALESCE(
 SELECT setval(pg_get_serial_sequence('evento', 'id_evento'),           COALESCE(MAX(id_evento), 1))      FROM Evento;
 SELECT setval(pg_get_serial_sequence('penalizacion', 'id_penalizacion'), COALESCE(MAX(id_penalizacion), 1)) FROM Penalizacion;
 
+-- Preflight R21/DD-12: la vista de sensores debe existir y cubrir el dataset base.
+DO $$
+DECLARE
+    v_sensores INT;
+    v_vista    INT;
+BEGIN
+    SELECT count(*) INTO v_sensores FROM Sensor;
+    SELECT count(*) INTO v_vista FROM vSensoresMantenimiento;
+
+    IF v_vista <> v_sensores THEN
+        RAISE EXCEPTION 'FALLO R21/DD-12: vSensoresMantenimiento devolvió % filas, pero hay % sensores.', v_vista, v_sensores;
+    END IF;
+
+    RAISE NOTICE 'ÉXITO preflight: vSensoresMantenimiento existe y cubre % sensores.', v_vista;
+END;
+$$;
+
 -- ----------------------------------------------------------------------------
 -- PRUEBA 1: R1 + R5 + R2 + R8 + R3 — Asignación automática al registrar incidente
 -- ----------------------------------------------------------------------------
@@ -393,62 +410,151 @@ END;
 $$;
 
 -- ----------------------------------------------------------------------------
+-- PRUEBA 7b: R20 ignora cualquier umbral global y usa solo el umbral por zona
+-- ----------------------------------------------------------------------------
+\echo '>>> PRUEBA 7b: R20 usa umbral por zona, no ParametrosSistema global'
+
+DO $$
+DECLARE
+    v_pendiente   INT;
+    v_incidente   INT;
+    v_n_asig      INT;
+    v_umbral_old  INT;
+BEGIN
+    SELECT id_estado_incidente INTO v_pendiente FROM EstadoIncidente WHERE nombre = 'Pendiente';
+    SELECT umbral_incidentes_activos INTO v_umbral_old FROM Zona WHERE id_zona = 1;
+
+    -- Si reaparece un control global, este parámetro en 0 bloquearía la asignación.
+    INSERT INTO ParametrosSistema (nombre_parametro, numero)
+    VALUES ('UMBRAL_INCIDENTES_ACTIVOS', 0)
+    ON CONFLICT (nombre_parametro) DO UPDATE SET numero = EXCLUDED.numero;
+
+    UPDATE Zona SET umbral_incidentes_activos = 99 WHERE id_zona = 1;
+
+    INSERT INTO Incidente (fk_tipo_incidente_id, fk_gravedad_id, fk_estado_incidente_id, fk_zona_id, descripcion, prioridad)
+    VALUES (1, 1, v_pendiente, 1, 'P7b - umbral global ignorado', 1)
+    RETURNING id_incidente INTO v_incidente;
+
+    SELECT count(*) INTO v_n_asig FROM Asignacion WHERE fk_incidente_id = v_incidente;
+
+    UPDATE Zona SET umbral_incidentes_activos = v_umbral_old WHERE id_zona = 1;
+    DELETE FROM ParametrosSistema WHERE nombre_parametro = 'UMBRAL_INCIDENTES_ACTIVOS';
+
+    IF v_n_asig = 0 THEN
+        RAISE EXCEPTION 'FALLO R20: un umbral global en 0 bloqueó la asignación aunque la zona tenía capacidad.';
+    END IF;
+
+    RAISE NOTICE 'ÉXITO P7b: R20 ignoró el parámetro global y asignó % recurso(s) por capacidad de zona.', v_n_asig;
+
+    DELETE FROM Asignacion WHERE fk_incidente_id = v_incidente;
+    DELETE FROM Incidente WHERE id_incidente = v_incidente;
+    UPDATE Recurso SET fk_estado_recurso_id = 1 WHERE fk_estado_recurso_id <> 1;
+END;
+$$;
+
+-- ----------------------------------------------------------------------------
 -- PRUEBA 8: Penalización automática por demora vía trigger en Asignacion
 -- ----------------------------------------------------------------------------
 \echo '>>> PRUEBA 8: Penalización automática por demora vía trigger en Asignacion'
 
 DO $$
 DECLARE
-    v_pendiente   INT;
-    v_incidente   INT;
-    v_asig        INT;
-    v_recurso     INT;
-    v_sla         INT;
-    v_tramo       INT;
-    v_puntos_esp  INT := 2;
-    v_puntos_obt  INT;
-    v_gravedad_baja INT;
+    v_pendiente      INT;
+    v_incidente      INT;
+    v_asig           INT;
+    v_recurso        INT;
+    v_sla            INT;
+    v_tramo          INT;
+    v_puntos_esp     INT := 2;
+    v_puntos_obt     INT;
+    v_gravedad_baja  INT;
+    v_pen_count      INT;
+    v_puntaje        INT;
+    v_estado_recurso TEXT;
 BEGIN
     SELECT id_estado_incidente INTO v_pendiente FROM EstadoIncidente WHERE nombre = 'Pendiente';
     SELECT id_gravedad INTO v_gravedad_baja FROM Gravedad WHERE nombre = 'Baja';
 
-    -- Insertar incidente para asegurar que se crea asignación
     INSERT INTO Incidente (fk_tipo_incidente_id, fk_gravedad_id, fk_estado_incidente_id, fk_zona_id, descripcion, prioridad)
     VALUES (1, v_gravedad_baja, v_pendiente, 1, 'P8 - test trigger penalizacion automatica', 1)
     RETURNING id_incidente INTO v_incidente;
 
-    -- Obtener la asignación y recurso creados automáticamente
     SELECT id_asignacion, fk_recurso_id INTO v_asig, v_recurso
     FROM Asignacion WHERE fk_incidente_id = v_incidente LIMIT 1;
 
-    -- Obtener SLA y minutos por punto
+    UPDATE Recurso SET puntaje = 0 WHERE id_recurso = v_recurso;
+
     SELECT tiempo_respuesta_minutos, minutos_por_punto_demora
     INTO v_sla, v_tramo
     FROM SLA WHERE fk_gravedad_id = v_gravedad_baja;
 
-    -- Actualizar timestamp_llegada directamente simulando demora de SLA + tramo * puntos + offset
+    -- 1) Primera llegada tardía: crea una única penalización P4 y descuenta puntos.
     UPDATE Asignacion
     SET timestamp_llegada = timestamp_asignacion + (v_sla + v_tramo * v_puntos_esp + 0.5) * INTERVAL '1 minute'
     WHERE id_asignacion = v_asig;
 
-    -- Verificar que el trigger insertó la penalización automáticamente (sin llamar a sp_CalcularPenalizacion)
-    SELECT COALESCE(puntaje, 0) INTO v_puntos_obt
+    SELECT count(*), COALESCE(max(puntaje), 0)
+    INTO v_pen_count, v_puntos_obt
     FROM Penalizacion
-    WHERE fk_recurso_id = v_recurso
-      AND motivo LIKE '%asignación #' || v_asig || '%'
-    ORDER BY id_penalizacion DESC LIMIT 1;
+    WHERE fk_asignacion_id = v_asig;
 
-    IF v_puntos_obt <> v_puntos_esp THEN
-        RAISE EXCEPTION 'FALLO trigger penalizacion: esperado % puntos de penalización, obtenido %.', v_puntos_esp, v_puntos_obt;
+    SELECT puntaje INTO v_puntaje FROM Recurso WHERE id_recurso = v_recurso;
+
+    IF v_pen_count <> 1 OR v_puntos_obt <> v_puntos_esp OR v_puntaje <> -v_puntos_esp THEN
+        RAISE EXCEPTION 'FALLO P4 inicial: filas %, puntos penalización %, puntaje recurso %; esperado 1, %, %.',
+            v_pen_count, v_puntos_obt, v_puntaje, v_puntos_esp, -v_puntos_esp;
     END IF;
 
-    RAISE NOTICE 'ÉXITO P8: El trigger en Asignacion penalizó automáticamente la demora con % puntos.', v_puntos_obt;
+    -- 2) Corrección posterior a menor demora: actualiza la misma fila y devuelve el delta de puntos.
+    UPDATE Asignacion
+    SET timestamp_llegada = timestamp_asignacion + (v_sla + v_tramo * 1 + 0.5) * INTERVAL '1 minute'
+    WHERE id_asignacion = v_asig;
 
-    -- Limpieza
+    SELECT count(*), COALESCE(max(puntaje), 0)
+    INTO v_pen_count, v_puntos_obt
+    FROM Penalizacion
+    WHERE fk_asignacion_id = v_asig;
+
+    SELECT puntaje INTO v_puntaje FROM Recurso WHERE id_recurso = v_recurso;
+
+    IF v_pen_count <> 1 OR v_puntos_obt <> 1 OR v_puntaje <> -1 THEN
+        RAISE EXCEPTION 'FALLO P4 recálculo: filas %, puntos penalización %, puntaje recurso %; esperado 1, 1, -1.',
+            v_pen_count, v_puntos_obt, v_puntaje;
+    END IF;
+
+    -- 3) Corrección dentro del SLA: elimina la penalización y restaura puntaje.
+    UPDATE Asignacion
+    SET timestamp_llegada = timestamp_asignacion + INTERVAL '1 minute'
+    WHERE id_asignacion = v_asig;
+
+    SELECT count(*) INTO v_pen_count
+    FROM Penalizacion
+    WHERE fk_asignacion_id = v_asig;
+
+    SELECT puntaje INTO v_puntaje FROM Recurso WHERE id_recurso = v_recurso;
+
+    IF v_pen_count <> 0 OR v_puntaje <> 0 THEN
+        RAISE EXCEPTION 'FALLO P4 eliminación por SLA: filas %, puntaje recurso %; esperado 0, 0.', v_pen_count, v_puntaje;
+    END IF;
+
+    -- 4) Corrección a NULL: la asignación abierta vuelve a dejar el recurso En tránsito.
+    UPDATE Asignacion
+    SET timestamp_llegada = NULL
+    WHERE id_asignacion = v_asig;
+
+    SELECT er.nombre INTO v_estado_recurso
+    FROM Recurso r JOIN EstadoRecurso er ON er.id_estado_recurso = r.fk_estado_recurso_id
+    WHERE r.id_recurso = v_recurso;
+
+    IF v_estado_recurso <> 'En tránsito' THEN
+        RAISE EXCEPTION 'FALLO P4/R8: al volver timestamp_llegada a NULL, el recurso debía quedar En tránsito y quedó %.', v_estado_recurso;
+    END IF;
+
+    RAISE NOTICE 'ÉXITO P8: P4 recalcula/elimina penalización sin duplicar puntos y sincroniza el estado de arribo.';
+
     DELETE FROM Asignacion WHERE fk_incidente_id = v_incidente;
-    DELETE FROM Penalizacion WHERE fk_recurso_id = v_recurso;
     DELETE FROM Incidente WHERE id_incidente = v_incidente;
-    UPDATE Recurso SET fk_estado_recurso_id = 1 WHERE fk_estado_recurso_id <> 1;
+    UPDATE Recurso SET fk_estado_recurso_id = 1, puntaje = 0 WHERE id_recurso = v_recurso;
 END;
 $$;
 
