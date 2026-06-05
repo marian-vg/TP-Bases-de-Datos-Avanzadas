@@ -58,13 +58,18 @@ BEGIN
     SET fk_estado_recurso_id = v_estado_disponible
     WHERE fk_estado_recurso_id = v_estado_fuera
       AND EXISTS (
-          SELECT 1 
-          FROM Log l
-          WHERE l.tablaAfectada = 'recurso' 
-            AND l.idTablaAfectada = r.id_recurso
-            AND l.operacion = 'UPDATE'
-            AND (l.detalle->'despues'->>'fk_estado_recurso_id')::int = v_estado_fuera
-            AND l.timestamp <= CURRENT_TIMESTAMP - (v_minutos * INTERVAL '1 minute')
+          SELECT 1
+          FROM (
+              SELECT (l.detalle->'despues'->>'fk_estado_recurso_id')::int AS estado, l.timestamp
+              FROM Log l
+              WHERE l.tablaAfectada = 'recurso' 
+                AND l.idTablaAfectada = r.id_recurso
+                AND l.operacion = 'UPDATE'
+              ORDER BY l.id_log DESC
+              LIMIT 1
+          ) sub
+          WHERE sub.estado = v_estado_fuera
+            AND sub.timestamp <= CURRENT_TIMESTAMP - (v_minutos * INTERVAL '1 minute')
       );
 END;
 $$;

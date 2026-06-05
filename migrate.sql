@@ -40,6 +40,7 @@
 \ir database/triggers/reglas-validadoras.sql
 \ir database/triggers/reglas-inteligencia.sql
 \ir database/triggers/reglas-automatizacion.sql
+\ir database/triggers/reglas-temporales.sql
 
 -- 7. Procedimientos Almacenados (P1/P2/P3/P4/P5)
 \ir database/store-procedures/asignar-recurso.sql
