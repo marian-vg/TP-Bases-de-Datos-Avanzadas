@@ -461,9 +461,9 @@ $$;
 
 
 -- ----------------------------------------------------------------------------
--- PRUEBA 9: sp_SimularEventoSensor - Casos de Error (Sensor/Evento inexistentes)
+-- PRUEBA 9: sp_SimularEventos - Casos de Error (Sensor/Evento inexistentes)
 -- ----------------------------------------------------------------------------
-\echo '>>> PRUEBA 9: sp_SimularEventoSensor validación de parámetros inválidos'
+\echo '>>> PRUEBA 9: sp_SimularEventos validación de parámetros inválidos'
 
 DO $$
 DECLARE
@@ -473,13 +473,13 @@ BEGIN
     -- 9.1 Sensor Inexistente
     v_bloqueado := FALSE;
     BEGIN
-        CALL sp_SimularEventoSensor(-9999, 1);
+        CALL sp_SimularEventos(-9999, 1);
     EXCEPTION WHEN OTHERS THEN
         v_bloqueado := TRUE;
         RAISE NOTICE '   (Bloqueo correcto sensor: %)', SQLERRM;
     END;
     IF NOT v_bloqueado THEN
-        RAISE EXCEPTION 'FALLO: sp_SimularEventoSensor no falló ante un ID de sensor inválido.';
+        RAISE EXCEPTION 'FALLO: sp_SimularEventos no falló ante un ID de sensor inválido.';
     END IF;
 
     -- Obtener un sensor existente
@@ -488,13 +488,13 @@ BEGIN
     -- 9.2 Tipo Evento Inexistente
     v_bloqueado := FALSE;
     BEGIN
-        CALL sp_SimularEventoSensor(v_sensor, -9999);
+        CALL sp_SimularEventos(v_sensor, -9999);
     EXCEPTION WHEN OTHERS THEN
         v_bloqueado := TRUE;
         RAISE NOTICE '   (Bloqueo correcto tipo evento: %)', SQLERRM;
     END;
     IF NOT v_bloqueado THEN
-        RAISE EXCEPTION 'FALLO: sp_SimularEventoSensor no falló ante un ID de tipo de evento inválido.';
+        RAISE EXCEPTION 'FALLO: sp_SimularEventos no falló ante un ID de tipo de evento inválido.';
     END IF;
 
     RAISE NOTICE 'ÉXITO: Se validaron correctamente los parámetros de sensor y tipo de evento.';
@@ -503,9 +503,9 @@ $$;
 
 
 -- ----------------------------------------------------------------------------
--- PRUEBA 10: sp_SimularEventoSensor - Caso Exitoso (Mapeo Único y Asignación)
+-- PRUEBA 10: sp_SimularEventos - Caso Exitoso (Mapeo Único y Asignación)
 -- ----------------------------------------------------------------------------
-\echo '>>> PRUEBA 10: sp_SimularEventoSensor simulación de evento con promoción única'
+\echo '>>> PRUEBA 10: sp_SimularEventos simulación de evento con promoción única'
 
 DO $$
 DECLARE
@@ -534,8 +534,8 @@ BEGIN
     VALUES (v_sensor, CURRENT_DATE);
 
     -- Ejecutamos la simulación
-    RAISE NOTICE '   Invocando sp_SimularEventoSensor para sensor % y tipo evento %...', v_sensor, v_tipo_evento;
-    CALL sp_SimularEventoSensor(v_sensor, v_tipo_evento);
+    RAISE NOTICE '   Invocando sp_SimularEventos para sensor % y tipo evento %...', v_sensor, v_tipo_evento;
+    CALL sp_SimularEventos(v_sensor, v_tipo_evento);
 
     -- Comprobar que:
     --   1. Se insertó un Evento.
@@ -560,9 +560,9 @@ $$;
 
 
 -- ----------------------------------------------------------------------------
--- PRUEBA 11: sp_SimularEventoSensor - Caso Mapeo Múltiple (No Promoción)
+-- PRUEBA 11: sp_SimularEventos - Caso Mapeo Múltiple (No Promoción)
 -- ----------------------------------------------------------------------------
-\echo '>>> PRUEBA 11: sp_SimularEventoSensor simulación de evento con mapeo no único (No-Op)'
+\echo '>>> PRUEBA 11: sp_SimularEventos simulación de evento con mapeo no único (No-Op)'
 
 DO $$
 DECLARE
@@ -583,8 +583,8 @@ BEGIN
     VALUES (v_sensor, CURRENT_DATE);
 
     -- Ejecutamos la simulación
-    RAISE NOTICE '   Invocando sp_SimularEventoSensor con mapeo múltiple (sensor %, tipo evento %)...', v_sensor, v_tipo_evento;
-    CALL sp_SimularEventoSensor(v_sensor, v_tipo_evento);
+    RAISE NOTICE '   Invocando sp_SimularEventos con mapeo múltiple (sensor %, tipo evento %)...', v_sensor, v_tipo_evento;
+    CALL sp_SimularEventos(v_sensor, v_tipo_evento);
 
     -- Comprobar que:
     --   1. Se registró el evento.

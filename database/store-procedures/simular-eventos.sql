@@ -1,5 +1,5 @@
 -- ============================================================================
--- P3. sp_SimularEventoSensor
+-- P5. sp_SimularEventos
 --
 -- • Simula la activación de un sensor físico que reporta un tipo de evento.
 -- • Valida existencia de sensor y tipo de evento.
@@ -8,7 +8,7 @@
 -- • Verifica si se creó el incidente correspondiente o si falló por validaciones (R11).
 -- ============================================================================
 
-CREATE OR REPLACE PROCEDURE sp_SimularEventoSensor(
+CREATE OR REPLACE PROCEDURE sp_SimularEventos(
     p_id_sensor INT,
     p_id_tipo_evento INT
 )

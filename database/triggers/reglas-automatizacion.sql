@@ -155,7 +155,27 @@ DECLARE
     v_en_atencion INT;
     v_tipo        INT;
     v_asignados   INT;
+    v_umbral_global INT;
+    v_incidentes_activos_global INT;
 BEGIN
+    -- 0. Control de capacidad global (R20): evitar asignación si el sistema completo está saturado
+    SELECT COALESCE(
+        (SELECT numero FROM ParametrosSistema WHERE nombre_parametro = 'UMBRAL_INCIDENTES_ACTIVOS'),
+        100
+    ) INTO v_umbral_global;
+
+    SELECT count(*)
+    INTO v_incidentes_activos_global
+    FROM Incidente i
+    JOIN EstadoIncidente ei ON i.fk_estado_incidente_id = ei.id_estado_incidente
+    WHERE ei.nombre IN ('Pendiente', 'En proceso', 'Escalado');
+
+    IF v_incidentes_activos_global >= v_umbral_global THEN
+        PERFORM fn_registrar_decision('incidente', NEW.id_incidente, 'R20',
+            'Incidente en espera: sistema al tope de capacidad global ('||v_incidentes_activos_global||'/'||v_umbral_global||').');
+        RETURN NEW;
+    END IF;
+
     -- 1. Control de capacidad por zona (R20): leer el tope configurado en la zona del incidente.
     SELECT umbral_incidentes_activos
     INTO v_umbral
