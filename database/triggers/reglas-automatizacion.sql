@@ -312,6 +312,15 @@ BEGIN
         RETURN;
     END IF;
 
+    -- Evitar duplicidad si ya fue penalizado para esta asignación
+    IF EXISTS (
+        SELECT 1 FROM Penalizacion
+        WHERE fk_recurso_id = v_recurso_id
+          AND motivo LIKE '%asignación #' || p_id_asignacion || '%'
+    ) THEN
+        RETURN;
+    END IF;
+
     v_minutos_respuesta := EXTRACT(EPOCH FROM (v_timestamp_llegada - v_timestamp_asignacion)) / 60;
     v_exceso_minutos := v_minutos_respuesta - v_sla_minutos;
 
@@ -357,6 +366,86 @@ $$;
 
 
 -- =============================================================================================================
+-- Trigger de Penalización Automática por Demora (SLA) en Asignacion
+-- =============================================================================================================
+CREATE OR REPLACE FUNCTION fn_penalizar_demora_asignacion()
+RETURNS TRIGGER AS $$
+DECLARE
+    v_sla_minutos INT;
+    v_minutos_por_punto INT;
+    v_minutos_respuesta NUMERIC;
+    v_exceso NUMERIC;
+    v_puntos INT;
+    v_tipo_penalizacion_id INT;
+    v_tipo_penalizacion_nombre TEXT;
+BEGIN
+    -- Se activa solo cuando el recurso llega (timestamp_llegada pasa de ser NULL a un valor real)
+    IF OLD.timestamp_llegada IS NULL AND NEW.timestamp_llegada IS NOT NULL THEN
+
+        -- Evaluamos en base a lo que el incidente nos diga (su gravedad y SLA)
+        SELECT s.tiempo_respuesta_minutos, s.minutos_por_punto_demora
+        INTO v_sla_minutos, v_minutos_por_punto
+        FROM Incidente i
+        JOIN SLA s ON s.fk_gravedad_id = i.fk_gravedad_id
+        WHERE i.id_incidente = NEW.fk_incidente_id;
+
+        IF FOUND AND v_sla_minutos IS NOT NULL THEN
+            v_minutos_respuesta := EXTRACT(EPOCH FROM (NEW.timestamp_llegada - NEW.timestamp_asignacion)) / 60;
+            v_exceso := v_minutos_respuesta - v_sla_minutos;
+
+            -- Detectamos si superó el umbral
+            IF v_exceso > 0 THEN
+                v_puntos := floor(v_exceso / v_minutos_por_punto);
+
+                IF v_puntos > 0 THEN
+                    v_tipo_penalizacion_nombre := CASE
+                        WHEN v_puntos = 1 THEN 'Demora leve'
+                        WHEN v_puntos = 2 THEN 'Demora moderada'
+                        ELSE 'Demora grave'
+                    END;
+
+                    SELECT id_tipo_penalizacion INTO v_tipo_penalizacion_id
+                    FROM TipoPenalizacion
+                    WHERE nombre = v_tipo_penalizacion_nombre;
+
+                    -- Evitar duplicidad si ya fue penalizado para esta asignación
+                    IF NOT EXISTS (
+                        SELECT 1 FROM Penalizacion
+                        WHERE fk_recurso_id = NEW.fk_recurso_id
+                          AND motivo LIKE '%asignación #' || NEW.id_asignacion || '%'
+                    ) THEN
+                        -- Actuamos insertando la penalización
+                        INSERT INTO Penalizacion (fk_recurso_id, fk_tipo_penalizacion_id, puntaje, motivo)
+                        VALUES (
+                            NEW.fk_recurso_id,
+                            v_tipo_penalizacion_id,
+                            v_puntos,
+                            'Demora de ' || floor(v_minutos_respuesta)::INT || ' min (' ||
+                            floor(v_exceso)::INT || ' sobre SLA) en asignación #' || NEW.id_asignacion ||
+                            ' para el incidente #' || NEW.fk_incidente_id || '.'
+                        );
+
+                        -- Decisión auditable
+                        PERFORM fn_registrar_decision('recurso', NEW.fk_recurso_id, 'P4',
+                            'Demora de ' || floor(v_minutos_respuesta)::INT || ' min (' ||
+                            floor(v_exceso)::INT || ' sobre SLA): -' || v_puntos || ' puntos');
+                    END IF;
+                END IF;
+            END IF;
+        END IF;
+    END IF;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS trg_penalizar_demora_asignacion ON Asignacion;
+CREATE TRIGGER trg_penalizar_demora_asignacion
+AFTER UPDATE OF timestamp_llegada ON Asignacion
+FOR EACH ROW
+EXECUTE FUNCTION fn_penalizar_demora_asignacion();
+
+
+-- =============================================================================================================
 -- 6. P4/R8(arribo) — fn_arribo_recurso / trg_arribo_recurso
 -- =============================================================================================================
 --
@@ -398,8 +487,6 @@ BEGIN
     UPDATE Asignacion
     SET timestamp_llegada = CURRENT_TIMESTAMP
     WHERE id_asignacion = v_asignacion;
-
-    CALL sp_CalcularPenalizacion(v_asignacion);
 
     RETURN NEW;
 END;

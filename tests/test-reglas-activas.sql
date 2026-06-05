@@ -392,6 +392,66 @@ BEGIN
 END;
 $$;
 
+-- ----------------------------------------------------------------------------
+-- PRUEBA 8: Penalización automática por demora vía trigger en Asignacion
+-- ----------------------------------------------------------------------------
+\echo '>>> PRUEBA 8: Penalización automática por demora vía trigger en Asignacion'
+
+DO $$
+DECLARE
+    v_pendiente   INT;
+    v_incidente   INT;
+    v_asig        INT;
+    v_recurso     INT;
+    v_sla         INT;
+    v_tramo       INT;
+    v_puntos_esp  INT := 2;
+    v_puntos_obt  INT;
+    v_gravedad_baja INT;
+BEGIN
+    SELECT id_estado_incidente INTO v_pendiente FROM EstadoIncidente WHERE nombre = 'Pendiente';
+    SELECT id_gravedad INTO v_gravedad_baja FROM Gravedad WHERE nombre = 'Baja';
+
+    -- Insertar incidente para asegurar que se crea asignación
+    INSERT INTO Incidente (fk_tipo_incidente_id, fk_gravedad_id, fk_estado_incidente_id, fk_zona_id, descripcion, prioridad)
+    VALUES (1, v_gravedad_baja, v_pendiente, 1, 'P8 - test trigger penalizacion automatica', 1)
+    RETURNING id_incidente INTO v_incidente;
+
+    -- Obtener la asignación y recurso creados automáticamente
+    SELECT id_asignacion, fk_recurso_id INTO v_asig, v_recurso
+    FROM Asignacion WHERE fk_incidente_id = v_incidente LIMIT 1;
+
+    -- Obtener SLA y minutos por punto
+    SELECT tiempo_respuesta_minutos, minutos_por_punto_demora
+    INTO v_sla, v_tramo
+    FROM SLA WHERE fk_gravedad_id = v_gravedad_baja;
+
+    -- Actualizar timestamp_llegada directamente simulando demora de SLA + tramo * puntos + offset
+    UPDATE Asignacion
+    SET timestamp_llegada = timestamp_asignacion + (v_sla + v_tramo * v_puntos_esp + 0.5) * INTERVAL '1 minute'
+    WHERE id_asignacion = v_asig;
+
+    -- Verificar que el trigger insertó la penalización automáticamente (sin llamar a sp_CalcularPenalizacion)
+    SELECT COALESCE(puntaje, 0) INTO v_puntos_obt
+    FROM Penalizacion
+    WHERE fk_recurso_id = v_recurso
+      AND motivo LIKE '%asignación #' || v_asig || '%'
+    ORDER BY id_penalizacion DESC LIMIT 1;
+
+    IF v_puntos_obt <> v_puntos_esp THEN
+        RAISE EXCEPTION 'FALLO trigger penalizacion: esperado % puntos de penalización, obtenido %.', v_puntos_esp, v_puntos_obt;
+    END IF;
+
+    RAISE NOTICE 'ÉXITO P8: El trigger en Asignacion penalizó automáticamente la demora con % puntos.', v_puntos_obt;
+
+    -- Limpieza
+    DELETE FROM Asignacion WHERE fk_incidente_id = v_incidente;
+    DELETE FROM Penalizacion WHERE fk_recurso_id = v_recurso;
+    DELETE FROM Incidente WHERE id_incidente = v_incidente;
+    UPDATE Recurso SET fk_estado_recurso_id = 1 WHERE fk_estado_recurso_id <> 1;
+END;
+$$;
+
 -- Limpieza final: dejar el entorno operativo vacío y los recursos disponibles.
 DELETE FROM Asignacion;
 DELETE FROM Penalizacion;
