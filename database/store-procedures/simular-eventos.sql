@@ -1,5 +1,5 @@
 -- ============================================================================
--- P3. sp_SimularEventoSensor
+-- P5. sp_SimularEventos
 --
 -- • Simula la activación de un sensor físico que reporta un tipo de evento.
 -- • Valida existencia de sensor y tipo de evento.
@@ -8,7 +8,7 @@
 -- • Verifica si se creó el incidente correspondiente o si falló por validaciones (R11).
 -- ============================================================================
 
-CREATE OR REPLACE PROCEDURE sp_SimularEventoSensor(
+CREATE OR REPLACE PROCEDURE sp_SimularEventos(
     p_id_sensor INT,
     p_id_tipo_evento INT
 )
@@ -39,7 +39,7 @@ BEGIN
     IF NOT FOUND THEN
         RAISE EXCEPTION 'El tipo de evento con ID % no existe.', p_id_tipo_evento;
     END IF;
-    
+
     -- 3. Insertar el evento de sensor
     --    Esto gatillará trg_evento_promocion, el cual intentará crear el incidente automáticamente.
     INSERT INTO Evento (fk_sensor_id, fk_tipo_evento_id, fecha_evento, hora_evento)
@@ -56,24 +56,24 @@ BEGIN
         FROM Asignacion
         WHERE fk_incidente_id = v_id_incidente;
 
-        RAISE NOTICE 'Evento #% simulado con éxito. Se creó automáticamente el incidente #% con % recursos asignados.', 
+        RAISE NOTICE 'Evento #% simulado con éxito. Se creó automáticamente el incidente #% con % recursos asignados.',
             v_id_evento, v_id_incidente, v_recursos_asignados;
     ELSE
-    
-        SELECT detalle->>'error', detalle->>'motivo' 
+
+        SELECT detalle->>'error', detalle->>'motivo'
         INTO v_error_log, v_motivo_log
         FROM Log
-        WHERE LOWER(tablaAfectada) = 'evento' 
-          AND idTablaAfectada = v_id_evento 
+        WHERE LOWER(tablaAfectada) = 'evento'
+          AND idTablaAfectada = v_id_evento
           AND trigger_disparador = 'trg_evento_promocion'
-        ORDER BY id_log DESC 
+        ORDER BY id_log DESC
         LIMIT 1;
 
         IF v_error_log IS NOT NULL THEN
-            RAISE NOTICE 'Evento #% registrado. No se pudo crear el incidente automático debido a validación de negocio: %', 
+            RAISE NOTICE 'Evento #% registrado. No se pudo crear el incidente automático debido a validación de negocio: %',
                 v_id_evento, v_error_log;
         ELSE
-            RAISE NOTICE 'Evento #% registrado. No se promovió a incidente. Motivo: %', 
+            RAISE NOTICE 'Evento #% registrado. No se promovió a incidente. Motivo: %',
                 v_id_evento, COALESCE(v_motivo_log, 'Mapeo de evento no configurado o de baja fiabilidad.');
         END IF;
     END IF;

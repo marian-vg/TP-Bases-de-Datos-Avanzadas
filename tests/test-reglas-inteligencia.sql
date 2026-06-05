@@ -49,6 +49,9 @@ SELECT setval(pg_get_serial_sequence('incidente', 'id_incidente'),     COALESCE(
 SELECT setval(pg_get_serial_sequence('asignacion', 'id_asignacion'),   COALESCE(MAX(id_asignacion), 1))  FROM Asignacion;
 SELECT setval(pg_get_serial_sequence('penalizacion', 'id_penalizacion'), COALESCE(MAX(id_penalizacion), 1)) FROM Penalizacion;
 
+-- Desactivar el trigger de penalización automática por demora para evitar interferencias
+ALTER TABLE Asignacion DISABLE TRIGGER trg_penalizar_demora_asignacion;
+
 
 -- ============================================================================
 -- R14 — SELECCIÓN DEL MEJOR RECURSO (IMPLEMENTADA)
@@ -438,6 +441,9 @@ BEGIN
         RAISE EXCEPTION 'FALLO R15: sin recursos locales el incidente quedó sin asignar (no hubo rebalanceo).';
     END IF;
 
+    DELETE FROM ZonaRecurso WHERE id_zona = 1 AND id_recurso = (
+        SELECT fk_recurso_id FROM Asignacion WHERE fk_incidente_id = v_inc LIMIT 1
+    );
     DELETE FROM Asignacion WHERE fk_incidente_id = v_inc;
     DELETE FROM Incidente WHERE id_incidente = v_inc;
     UPDATE Recurso SET fk_estado_recurso_id = 1 WHERE fk_estado_recurso_id <> 1;
@@ -457,6 +463,7 @@ UPDATE Recurso SET puntaje = 0 WHERE puntaje <> 0;
 -- Rehabilitar los triggers apagados
 ALTER TABLE Incidente ENABLE TRIGGER trg_asignacion_automatica;
 ALTER TABLE Incidente ENABLE TRIGGER trg_valida_registro_incidente;
+ALTER TABLE Asignacion ENABLE TRIGGER trg_penalizar_demora_asignacion;
 
 \echo '--------------------------------------------------'
 \echo '>>> PRUEBAS DE INTELIGENCIA FINALIZADAS'

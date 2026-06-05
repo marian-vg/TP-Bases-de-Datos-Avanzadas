@@ -1,0 +1,446 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Dossier final de la integracion del motor activo y la simulacion profesional Smart City.">
+  <title>Smart City / Dossier final de integracion</title>
+  <style>
+    @import url("https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&family=Manrope:wght@400;500;600;700;800&family=Playfair+Display:ital,wght@0,600;1,600&display=swap");
+    :root {
+      --bg: #f3f0e8;
+      --surface: #faf8f2;
+      --ink: #181b19;
+      --muted: #686d68;
+      --line: #c8c8bf;
+      --soft: #e6e2d8;
+      --accent: #e15338;
+      --green: #245e4b;
+      --amber: #9a6928;
+      --red: #9c3d35;
+      --max: 1440px;
+    }
+    [data-theme="dark"] {
+      --bg: #171a18;
+      --surface: #202420;
+      --ink: #edeee8;
+      --muted: #a7ada7;
+      --line: #464c47;
+      --soft: #292e2a;
+      --accent: #f0785e;
+      --green: #7bb69e;
+      --amber: #d2a55e;
+      --red: #df8178;
+    }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      color: var(--ink);
+      background: var(--bg);
+      font: 15px/1.7 "Manrope", sans-serif;
+      transition: color .2s, background .2s;
+    }
+    body::before {
+      content: "";
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      opacity: .32;
+      background:
+        linear-gradient(90deg, transparent 49.9%, color-mix(in srgb, var(--line) 25%, transparent) 50%, transparent 50.1%),
+        radial-gradient(circle at 85% 8%, color-mix(in srgb, var(--accent) 15%, transparent), transparent 25rem);
+    }
+    a { color: inherit; }
+    code, .mono { font-family: "DM Mono", monospace; }
+    button, input { font: inherit; color: inherit; }
+    .progress { position: fixed; inset: 0 auto auto 0; z-index: 30; height: 3px; width: 0; background: var(--accent); }
+    .topbar {
+      position: sticky;
+      top: 0;
+      z-index: 20;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 1rem;
+      min-height: 64px;
+      padding: .7rem clamp(1rem, 4vw, 4rem);
+      border-bottom: 1px solid color-mix(in srgb, var(--line) 55%, transparent);
+      background: color-mix(in srgb, var(--bg) 88%, transparent);
+      backdrop-filter: blur(16px);
+    }
+    .brand { font: 500 .72rem/1 "DM Mono", monospace; letter-spacing: .15em; text-transform: uppercase; }
+    .actions { display: flex; gap: .55rem; }
+    .actions button {
+      width: 38px;
+      height: 38px;
+      border: 1px solid var(--line);
+      border-radius: 50%;
+      background: transparent;
+      cursor: pointer;
+    }
+    .actions button:hover { border-color: var(--accent); background: var(--surface); }
+    .hero {
+      display: grid;
+      grid-template-columns: minmax(0, 1.6fr) minmax(280px, .55fr);
+      align-items: end;
+      gap: clamp(3rem, 8vw, 9rem);
+      max-width: var(--max);
+      min-height: calc(100vh - 64px);
+      margin: auto;
+      padding: clamp(5rem, 10vw, 9rem) clamp(1.2rem, 5vw, 5rem) 5rem;
+    }
+    .eyebrow, .kicker {
+      color: var(--accent);
+      font: 500 .7rem/1.4 "DM Mono", monospace;
+      letter-spacing: .14em;
+      text-transform: uppercase;
+    }
+    h1, h2, h3 { margin: 0; line-height: 1.08; }
+    h1 {
+      max-width: 950px;
+      margin-top: 1.2rem;
+      font: 600 clamp(4rem, 9vw, 9.5rem)/.93 "Playfair Display", serif;
+      letter-spacing: -.06em;
+    }
+    h1 em { color: var(--accent); }
+    .lede { max-width: 780px; margin: 2rem 0 0; color: var(--muted); font-size: clamp(1.05rem, 1.5vw, 1.28rem); }
+    .facts { border-top: 1px solid var(--line); }
+    .fact { display: grid; grid-template-columns: 72px 1fr; gap: 1rem; padding: 1.15rem 0; border-bottom: 1px solid var(--line); }
+    .fact b { color: var(--accent); font: 600 1.8rem/1 "Playfair Display", serif; }
+    .fact span { color: var(--muted); font-size: .78rem; }
+    .shell {
+      display: grid;
+      grid-template-columns: 260px minmax(0, 1fr);
+      gap: clamp(2rem, 5vw, 6rem);
+      max-width: var(--max);
+      margin: auto;
+      padding: 0 clamp(1.2rem, 5vw, 5rem) 8rem;
+    }
+    nav { position: sticky; top: 88px; align-self: start; max-height: calc(100vh - 110px); overflow: auto; }
+    .search { width: 100%; margin: 1rem 0; padding: .75rem .85rem; border: 1px solid var(--line); border-radius: 3px; background: transparent; }
+    .nav-link { display: grid; grid-template-columns: 34px 1fr; gap: .5rem; padding: .72rem 0; border-top: 1px solid var(--line); text-decoration: none; color: var(--muted); font-size: .76rem; }
+    .nav-link:last-child { border-bottom: 1px solid var(--line); }
+    .nav-link strong { display: block; color: var(--ink); font-size: .8rem; }
+    .nav-link.active strong, .nav-link:hover strong { color: var(--accent); }
+    main { min-width: 0; }
+    section, article { scroll-margin-top: 90px; }
+    .chapter { padding: clamp(4rem, 7vw, 7rem) 0; border-top: 1px solid var(--line); }
+    .chapter:first-child { border-top: 0; }
+    .chapter h2 { max-width: 980px; margin-top: .8rem; font: 600 clamp(2.5rem, 5vw, 5.2rem)/1 "Playfair Display", serif; letter-spacing: -.045em; }
+    .intro { max-width: 900px; margin: 1.5rem 0 2.5rem; color: var(--muted); font-size: 1.08rem; }
+    .grid-2, .grid-3 { display: grid; gap: 1rem; }
+    .grid-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .grid-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .card, .commit {
+      padding: clamp(1.2rem, 2.5vw, 2rem);
+      border: 1px solid var(--line);
+      background: color-mix(in srgb, var(--surface) 72%, transparent);
+    }
+    .card h3, .commit h3 { margin-bottom: .75rem; font-size: 1rem; }
+    .card p, .commit p { margin: 0; color: var(--muted); }
+    .status { display: inline-block; margin-bottom: .8rem; padding: .25rem .5rem; border: 1px solid currentColor; font: 500 .66rem/1 "DM Mono", monospace; letter-spacing: .08em; text-transform: uppercase; }
+    .ok { color: var(--green); }
+    .partial { color: var(--amber); }
+    .gap { color: var(--red); }
+    .merge {
+      display: grid;
+      grid-template-columns: 1fr 80px 1fr;
+      align-items: stretch;
+      gap: 1rem;
+    }
+    .merge-center { display: grid; place-items: center; color: var(--accent); font: 500 1.5rem "DM Mono", monospace; }
+    ul { margin: .7rem 0 0; padding-left: 1.15rem; }
+    li { margin: .45rem 0; }
+    .table-wrap { overflow: auto; border: 1px solid var(--line); }
+    table { width: 100%; border-collapse: collapse; min-width: 780px; background: color-mix(in srgb, var(--surface) 68%, transparent); }
+    th, td { padding: .85rem 1rem; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
+    th { color: var(--muted); font: 500 .68rem "DM Mono", monospace; letter-spacing: .08em; text-transform: uppercase; }
+    td:first-child { font-family: "DM Mono", monospace; font-size: .75rem; }
+    .commit-list { display: grid; gap: .8rem; }
+    .commit { display: grid; grid-template-columns: 105px 1fr; gap: 1.2rem; }
+    .hash { color: var(--accent); font: 500 .78rem "DM Mono", monospace; }
+    .commit h3 { margin: 0 0 .4rem; }
+    .commit ul { color: var(--muted); }
+    .issue {
+      display: grid;
+      grid-template-columns: 74px minmax(180px, .7fr) minmax(260px, 1.4fr) minmax(260px, 1.4fr);
+      gap: 1rem;
+      padding: 1.25rem 0;
+      border-top: 1px solid var(--line);
+    }
+    .issue:last-child { border-bottom: 1px solid var(--line); }
+    .issue-id { color: var(--accent); font: 500 .72rem "DM Mono", monospace; }
+    .issue h3 { font-size: .9rem; }
+    .issue p { margin: 0; color: var(--muted); font-size: .86rem; }
+    .path { color: var(--green); font: 400 .72rem/1.55 "DM Mono", monospace; overflow-wrap: anywhere; }
+    .file-map { display: grid; gap: 0; border-top: 1px solid var(--line); }
+    .file-row {
+      display: grid;
+      grid-template-columns: minmax(220px, .8fr) minmax(300px, 1.5fr);
+      gap: 1rem;
+      padding: 1rem 0;
+      border-bottom: 1px solid var(--line);
+    }
+    .file-row p { margin: 0; color: var(--muted); }
+    .callout { margin-top: 2rem; padding: 1.4rem; border-left: 3px solid var(--accent); background: var(--soft); }
+    .callout p { margin: 0; color: var(--muted); }
+    .hidden { display: none !important; }
+    footer { padding: 3rem 0 0; color: var(--muted); font-size: .75rem; }
+    @media (max-width: 1000px) {
+      .hero { grid-template-columns: 1fr; min-height: auto; }
+      .shell { grid-template-columns: 1fr; }
+      nav { position: static; max-height: none; }
+      .grid-3 { grid-template-columns: 1fr 1fr; }
+    }
+    @media (max-width: 680px) {
+      .grid-2, .grid-3, .merge { grid-template-columns: 1fr; }
+      .merge-center { min-height: 50px; }
+      .commit, .issue, .file-row { grid-template-columns: 1fr; }
+      h1 { font-size: clamp(3.4rem, 19vw, 6rem); }
+    }
+    @media print {
+      .topbar, nav, .progress { display: none; }
+      body { background: white; color: black; }
+      .hero { min-height: auto; padding: 2rem 0; }
+      .shell { display: block; padding: 0; }
+      .chapter { break-inside: avoid; padding: 2rem 0; }
+      .card, .commit, table { background: white; }
+    }
+  </style>
+</head>
+<body>
+  <div class="progress" id="progress"></div>
+  <header class="topbar">
+    <div class="brand">Smart City / dossier final</div>
+    <div class="actions">
+      <button id="theme" aria-label="Cambiar tema" title="Cambiar tema">◐</button>
+      <button id="print" aria-label="Imprimir documento" title="Imprimir">↗</button>
+    </div>
+  </header>
+
+  <section class="hero">
+    <div>
+      <div class="eyebrow">Estado final posterior a la integracion</div>
+      <h1>Dos ramas. Un solo <em>sistema coherente.</em></h1>
+      <p class="lede">Este documento reemplaza el dossier anterior. Explica qué se conservó de la primera simulación, qué motor se incorporó desde <span class="mono">dev/create-triggers</span>, cómo se evitó un merge destructivo y qué evidencia produce hoy la rama <span class="mono">dev/simulacion</span>.</p>
+    </div>
+    <aside class="facts">
+      <div class="fact"><b>13</b><span>commits funcionales y documentales trazados, excluyendo la skill de commits.</span></div>
+      <div class="fact"><b>9</b><span>módulos ejecutados por un único runner transaccional.</span></div>
+      <div class="fact"><b>20</b><span>incidentes creados en una ráfaga determinística obligatoria.</span></div>
+      <div class="fact"><b>1</b><span>verdad operativa: la migración canónica y el motor integrado.</span></div>
+    </aside>
+  </section>
+
+  <div class="shell">
+    <nav>
+      <div class="kicker">Navegación</div>
+      <input class="search" id="search" type="search" placeholder="Buscar regla, commit o concepto...">
+      <a class="nav-link" href="#veredicto"><span>01</span><span><strong>Veredicto final</strong>qué quedó realmente</span></a>
+      <a class="nav-link" href="#merge"><span>02</span><span><strong>Cómo se integró</strong>lo mejor de cada rama</span></a>
+      <a class="nav-link" href="#arquitectura"><span>03</span><span><strong>Arquitectura final</strong>motor, suite y reporte</span></a>
+      <a class="nav-link" href="#inventario"><span>04</span><span><strong>Inventario final</strong>qué implementa cada archivo</span></a>
+      <a class="nav-link" href="#escenarios"><span>05</span><span><strong>Mega simulación</strong>escenario por escenario</span></a>
+      <a class="nav-link" href="#errores"><span>06</span><span><strong>Errores encontrados</strong>causa, riesgo y solución</span></a>
+      <a class="nav-link" href="#cobertura"><span>07</span><span><strong>Cobertura honesta</strong>cumplimientos y brechas</span></a>
+      <a class="nav-link" href="#commits"><span>08</span><span><strong>Historia por commit</strong>evolución completa</span></a>
+      <a class="nav-link" href="#auditoria"><span>09</span><span><strong>Auditoría final</strong>correcciones de coherencia</span></a>
+    </nav>
+
+    <main>
+      <section class="chapter searchable" id="veredicto" data-search="veredicto final coherencia consigna">
+        <div class="kicker">Resultado</div>
+        <h2>La simulación quedó alineada con el motor integrado.</h2>
+        <p class="intro">La rama final ya no simula sobre supuestos del motor anterior. Migración, Docker, reglas activas, escenarios, reporte y tests hablan el mismo idioma: capacidad por zona, recursos que pasan de <span class="mono">Disponible</span> a <span class="mono">En tránsito</span>, arribo en <span class="mono">Ocupado</span>, penalización proporcional y decisiones auditables.</p>
+        <div class="grid-3">
+          <article class="card"><span class="status ok">Conservado</span><h3>Harness y reporte</h3><p>Se mantuvieron el runner único, las aserciones acumuladas, el rollback global, la restauración de secuencias y el reporte operativo.</p></article>
+          <article class="card"><span class="status ok">Integrado</span><h3>Motor activo</h3><p>Se adoptaron capacidad por zona, R15 explícita, R16/R17 cargadas, decisiones R18 y P4 proporcional.</p></article>
+          <article class="card"><span class="status partial">Sincerado</span><h3>Cobertura parcial</h3><p>R18, R19 y R20 ya no aparecen como completos cuando la consigna exige más de lo implementado.</p></article>
+        </div>
+      </section>
+
+      <section class="chapter searchable" id="merge" data-search="merge ramas create triggers simulacion integracion">
+        <div class="kicker">Integración selectiva</div>
+        <h2>No se mezclaron carpetas. Se combinaron responsabilidades.</h2>
+        <p class="intro">Un merge directo producía diez conflictos y hubiera dejado dos conjuntos de simulaciones incompatibles. La estrategia fue usar el motor de <span class="mono">dev/create-triggers</span> como referencia funcional y mantener la infraestructura de evidencia de <span class="mono">dev/simulacion</span>.</p>
+        <div class="merge">
+          <article class="card">
+            <span class="status ok">dev/create-triggers</span>
+            <h3>Conocimiento del dominio</h3>
+            <ul>
+              <li>Ciclo <span class="mono">En tránsito → Ocupado</span>.</li>
+              <li>Capacidad configurada por zona.</li>
+              <li>Rebalanceo R15 que habilita cobertura.</li>
+              <li>Escalamiento y reactivación temporal.</li>
+              <li>Penalización proporcional por demora.</li>
+              <li>Registro explícito de decisiones.</li>
+            </ul>
+          </article>
+          <div class="merge-center">+</div>
+          <article class="card">
+            <span class="status ok">dev/simulacion</span>
+            <h3>Evidencia y presentación</h3>
+            <ul>
+              <li>Runner transaccional único.</li>
+              <li>Resultados PASS / FAIL / XFAIL / SKIP.</li>
+              <li>Escenarios dinámicos sin IDs mágicos.</li>
+              <li>Ráfaga obligatoria de veinte incidentes.</li>
+              <li>Matriz R1–R21 / P1–P5.</li>
+              <li>Reporte orientado a defensa oral.</li>
+            </ul>
+          </article>
+        </div>
+        <div class="callout"><p><strong>Decisión central:</strong> no se conservaron las simulaciones independientes de la otra rama porque duplicaban responsabilidades. Sus mejores verificaciones, especialmente el rebalanceo, fueron reescritas dentro del harness común.</p></div>
+      </section>
+
+      <section class="chapter searchable" id="arquitectura" data-search="arquitectura runner rollback motor reporte">
+        <div class="kicker">Arquitectura final</div>
+        <h2>La base reacciona; la suite observa y demuestra.</h2>
+        <p class="intro">La simulación no inventa reglas para aprobar. Ejecuta el motor instalado por <span class="mono">migrate.sql</span>, registra resultados temporales y revierte todas las mutaciones al terminar.</p>
+        <div class="grid-2">
+          <article class="card"><h3>1. Migración canónica</h3><p>Carga esquema, dataset, vistas, validaciones, inteligencia, automatización, reglas temporales y P1. Docker replica el mismo orden.</p></article>
+          <article class="card"><h3>2. Harness temporal</h3><p>Toma snapshots de parámetros, zonas, recursos, permisos y secuencias. Define utilidades para resolver catálogos, afirmar resultados y registrar brechas.</p></article>
+          <article class="card"><h3>3. Escenarios funcionales</h3><p>Cada módulo limpia el estado operativo dentro de la transacción, prepara condiciones y comprueba efectos reales del motor.</p></article>
+          <article class="card"><h3>4. Reporte y rollback</h3><p>El reporte cruza evidencia con objetos instalados. Luego restaura secuencias y ejecuta <span class="mono">ROLLBACK</span>.</p></article>
+        </div>
+      </section>
+
+      <section class="chapter searchable" id="inventario" data-search="inventario archivos implementacion runner harness escenarios reporte motor tests">
+        <div class="kicker">Mapa de implementación</div>
+        <h2>Qué aporta realmente cada parte de la rama.</h2>
+        <p class="intro">Este inventario permite leer la rama sin recorrer todos los diffs. Separa el motor que toma decisiones, la suite que lo pone a prueba y la documentación que explica la evidencia.</p>
+        <div class="file-map">
+          <div class="file-row"><span class="path">migrate.sql · docker/init-db.sh</span><p>Son las entradas canónicas del sistema. Fueron alineadas para cargar las reglas temporales y el mismo conjunto de módulos tanto manualmente como dentro de Docker.</p></div>
+          <div class="file-row"><span class="path">database/create-tables.sql · create-views.sql</span><p>Definen la capacidad por zona y las vistas adaptadas al motor integrado. La simulación consulta estos objetos, pero no crea versiones falsas para aprobar.</p></div>
+          <div class="file-row"><span class="path">database/triggers/reglas-automatizacion.sql</span><p>Implementa la asignación automática, el ciclo de estados, el cierre, las fallas, el rebalanceo, la promoción de eventos y las decisiones asociadas.</p></div>
+          <div class="file-row"><span class="path">database/triggers/reglas-inteligencia.sql</span><p>Calcula prioridad, cantidad de recursos, selección del mejor candidato y compatibilidad. Es la base de las pruebas R5, R12, R13, R14 y R15.</p></div>
+          <div class="file-row"><span class="path">database/triggers/reglas-temporales.sql</span><p>Expone escalamiento por SLA, reactivación y penalización proporcional. Funciona al invocarse, aunque no existe un scheduler integrado.</p></div>
+          <div class="file-row"><span class="path">simulacion/00_run_all.sql · lib/harness.sql</span><p>Abren la transacción, toman snapshots, acumulan resultados y métricas, ejecutan todos los módulos, restauran secuencias y revierten la corrida.</p></div>
+          <div class="file-row"><span class="path">simulacion/01…08_*.sql</span><p>Preparan escenarios reproducibles y verifican comportamientos reales con PASS, FAIL, XFAIL, XPASS, SKIP e INFO. Cada escenario reinicia el estado operativo dentro de la misma transacción.</p></div>
+          <div class="file-row"><span class="path">simulacion/09_reporte_operativo.sql</span><p>Convierte resultados y métricas en un veredicto legible: cobertura R1–R21/P1–P5, lote de veinte, SLA, recursos, penalizaciones, decisiones y brechas.</p></div>
+          <div class="file-row"><span class="path">tests/test-*.sql</span><p>Los tests heredados fueron alineados con los nombres de triggers, estados y capacidad del motor final para que no contradigan la simulación.</p></div>
+          <div class="file-row"><span class="path">simulacion/README.md · documentacion/*.html</span><p>Explican ejecución, arquitectura, cobertura honesta, integración entre ramas y esta bitácora completa de decisiones y errores.</p></div>
+        </div>
+      </section>
+
+      <section class="chapter searchable" id="escenarios" data-search="escenarios mega simulacion preflight iot rebalanceo sla veinte">
+        <div class="kicker">Mega simulación</div>
+        <h2>Nueve módulos, una narrativa operativa.</h2>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Módulo</th><th>Qué demuestra</th><th>Detalle importante</th></tr></thead>
+            <tbody>
+              <tr><td>01_preflight</td><td>Dataset, vistas y objetos instalados.</td><td>Distingue archivo existente de capacidad realmente cargada.</td></tr>
+              <tr><td>02_asignacion</td><td>R1, R2, R5, R8, R12, R13 y R14.</td><td>Elige una zona de riesgo que realmente tenga candidatos disponibles.</td></tr>
+              <tr><td>03_ciclo_vida</td><td>Éxito, cierre, liberación, falla y reasignación.</td><td>Valida penalización por falla y continuidad del incidente.</td></tr>
+              <tr><td>04_validaciones</td><td>Doble asignación, estado, tipo, zona y duplicados.</td><td>Captura excepciones esperadas como evidencia positiva.</td></tr>
+              <tr><td>05_sensores_iot</td><td>Promoción, baja confianza, ambigüedad y duplicados.</td><td>Comprueba trazabilidad de decisiones R21.</td></tr>
+              <tr><td>06_saturacion</td><td>R15 y R20 por zona.</td><td>Comprueba origen externo, habilitación, compatibilidad, log y ciclo completo.</td></tr>
+              <tr><td>07_avanzadas</td><td>R16, R17, P1, P2 y P4.</td><td>Incluye asignación diferida y brechas parciales honestas.</td></tr>
+              <tr><td>08_lote20</td><td>Ráfaga determinística de veinte incidentes.</td><td>Gravedades resueltas desde catálogo, fallas inducidas y métricas.</td></tr>
+              <tr><td>09_reporte</td><td>Veredicto, tablero, cobertura, SLA y auditoría.</td><td>No confunde presencia de objetos con cumplimiento funcional.</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="chapter searchable" id="errores" data-search="errores hallazgos problemas causa riesgo solucion ids mágicos secuencias estados cobertura">
+        <div class="kicker">Bitácora de hallazgos</div>
+        <h2>Errores encontrados durante el trabajo y cómo se resolvieron.</h2>
+        <p class="intro">Esta lista incluye tanto defectos de las simulaciones originales como inconsistencias descubiertas al integrar el motor de la otra rama. “Corregido” significa que la rama ya lo resuelve; “visible” significa que pertenece al motor y se documenta sin fingir una implementación.</p>
+        <div class="issue"><span class="issue-id">H-01</span><h3>Simulaciones destructivas</h3><p><strong>Problema y riesgo.</strong> Las demos originales borraban datos operativos globalmente. Ejecutarlas podía alterar una base compartida y no dejaba una forma confiable de comparar antes/después.</p><p><strong>Solución.</strong> Se creó un runner con transacción global, snapshots, resets internos y <span class="mono">ROLLBACK</span> obligatorio.</p></div>
+        <div class="issue"><span class="issue-id">H-02</span><h3>Sin aserciones automáticas</h3><p><strong>Problema y riesgo.</strong> Los scripts mostraban consultas, pero una salida incorrecta podía parecer exitosa. No existía veredicto ni código de salida útil.</p><p><strong>Solución.</strong> El harness registra PASS/FAIL/XFAIL/XPASS/SKIP/INFO; solo un fallo inesperado devuelve código no exitoso y el reporte se imprime antes del rollback.</p></div>
+        <div class="issue"><span class="issue-id">H-03</span><h3>IDs mágicos</h3><p><strong>Problema y riesgo.</strong> Varios escenarios asumían IDs concretos. El caso más persistente asignaba gravedades como <span class="mono">1..5</span>; un dataset distinto rompía o medía otra cosa.</p><p><strong>Solución.</strong> Se resolvieron catálogos por nombre o relaciones. El lote de veinte obtiene las gravedades existentes dinámicamente.</p></div>
+        <div class="issue"><span class="issue-id">H-04</span><h3>Candidatos no disponibles</h3><p><strong>Problema y riesgo.</strong> Los escenarios de inteligencia y validación podían elegir como candidato un recurso ocupado o fuera de servicio y atribuir el resultado a otra regla.</p><p><strong>Solución.</strong> Las búsquedas ahora exigen estado <span class="mono">Disponible</span>, tipo compatible y zona habilitada antes de ejecutar la prueba.</p></div>
+        <div class="issue"><span class="issue-id">H-05</span><h3>Estados contradictorios</h3><p><strong>Problema y riesgo.</strong> Tests y simulaciones esperaban <span class="mono">Ocupado</span> apenas se asignaba un recurso, aunque el motor integrado usa <span class="mono">En tránsito</span> hasta registrar el arribo.</p><p><strong>Solución.</strong> Se alinearon escenarios y tests con el ciclo real: Disponible → En tránsito → Ocupado → Disponible.</p></div>
+        <div class="issue"><span class="issue-id">H-06</span><h3>Umbral obsoleto</h3><p><strong>Problema y riesgo.</strong> Un test seguía modificando <span class="mono">UMBRAL_RECURSOS_ACTIVOS</span>, parámetro eliminado al adoptar capacidad configurable por zona.</p><p><strong>Solución.</strong> El test y la simulación ahora modifican temporalmente <span class="mono">Zona.umbral_incidentes_activos</span> y comprueban R20 por zona.</p></div>
+        <div class="issue"><span class="issue-id">H-07</span><h3>Triggers con nombres viejos</h3><p><strong>Problema y riesgo.</strong> Los tests intentaban desactivar triggers que ya no existen, por lo que podían fallar antes de probar la validación buscada.</p><p><strong>Solución.</strong> Se actualizaron los nombres al conjunto instalado: asignación automática, asignación aplicada y asignación finalizada.</p></div>
+        <div class="issue"><span class="issue-id">H-08</span><h3>Rollback incompleto</h3><p><strong>Problema y riesgo.</strong> PostgreSQL no revierte secuencias con <span class="mono">ROLLBACK</span>. La suite no persistía filas, pero sí avanzaba IDs y dejaba huella.</p><p><strong>Solución.</strong> El harness captura <span class="mono">last_value/is_called</span> de cada secuencia y las restaura explícitamente antes del rollback.</p></div>
+        <div class="issue"><span class="issue-id">H-09</span><h3>P1 aprobado por presencia</h3><p><strong>Problema y riesgo.</strong> El reporte marcaba P1 como PASS solo porque el procedimiento existía; eso no demostraba que pudiera recuperar un incidente pendiente.</p><p><strong>Solución.</strong> Se agregó una prueba funcional: fuerza capacidad agotada, crea el pendiente, restablece capacidad, invoca P1 y verifica asignación y estado.</p></div>
+        <div class="issue"><span class="issue-id">H-10</span><h3>R15 incompleta en la prueba</h3><p><strong>Problema y riesgo.</strong> Ver una asignación externa no alcanzaba para probar rebalanceo completo: podía faltar compatibilidad, habilitación de zona, log o cierre del ciclo.</p><p><strong>Solución.</strong> El escenario valida origen externo, compatibilidad, permiso agregado, decisión registrada y liberación final del recurso.</p></div>
+        <div class="issue"><span class="issue-id">H-11</span><h3>Cobertura sobredeclarada</h3><p><strong>Problema y riesgo.</strong> R18, R19 y R20 aparecían como completas por tener logs, vista o control de capacidad, aunque no cumplían literalmente toda la consigna.</p><p><strong>Solución.</strong> Se cambiaron a XFAIL parciales: no se registra cada acción/regla, no se registra cada ejecución de trigger y falta el estado literal <span class="mono">En espera</span>.</p></div>
+        <div class="issue"><span class="issue-id">H-12</span><h3>Archivo versus instalación</h3><p><strong>Problema y riesgo.</strong> La existencia de SQL para reglas temporales o auditoría podía confundirse con objetos realmente cargados por la migración.</p><p><strong>Solución.</strong> Preflight y cobertura consultan el catálogo de PostgreSQL y comparan objeto esperado con objeto instalado; migración y Docker quedaron alineados.</p></div>
+        <div class="issue"><span class="issue-id">H-13</span><h3>Reporte con datos ya reseteados</h3><p><strong>Problema y riesgo.</strong> Algunos títulos sugerían que el reporte acumulaba decisiones de todos los escenarios, aunque cada módulo limpia el estado operativo.</p><p><strong>Solución.</strong> Los títulos aclaran que penalizaciones y decisiones avanzadas observadas pertenecen al lote final; las aserciones sí permanecen acumuladas.</p></div>
+        <div class="issue"><span class="issue-id">H-14</span><h3>Comentario funcional falso</h3><p><strong>Problema y riesgo.</strong> P1 afirmaba realizar rebalanceo geográfico por sí mismo, cuando en realidad asigna recursos que ya fueron habilitados para la zona.</p><p><strong>Solución.</strong> Se corrigió el comentario para separar responsabilidades y evitar una explicación engañosa durante la defensa.</p></div>
+        <div class="issue"><span class="issue-id">H-15</span><h3>Brechas reales del motor</h3><p><strong>Problema y riesgo.</strong> R6, P3, P5, el bloqueo por penalizaciones y el scheduler de R16/R17 no están implementados. Agregarlos dentro de la simulación falsearía el motor.</p><p><strong>Tratamiento.</strong> Permanecen visibles como XFAIL o dependencia externa. La rama demuestra la ausencia y explica exactamente su alcance.</p></div>
+      </section>
+
+      <section class="chapter searchable" id="cobertura" data-search="cobertura brechas r18 r19 r20 p3 p5 r6">
+        <div class="kicker">Lectura honesta</div>
+        <h2>Lo implementado se demuestra. Lo parcial se marca.</h2>
+        <div class="grid-3">
+          <article class="card"><span class="status ok">Demostrado</span><h3>Flujos centrales</h3><p>Asignación, prioridad, mejor recurso, rebalanceo, ciclo de vida, sensores, SLA, reactivación, P1, P2 y P4.</p></article>
+          <article class="card"><span class="status partial">Parcial</span><h3>R18 / R19 / R20</h3><p>Hay decisiones, historial y capacidad, pero no todas las ejecuciones quedan registradas y falta el estado literal <span class="mono">En espera</span>.</p></article>
+          <article class="card"><span class="status gap">Ausente</span><h3>R6 / P3 / P5 / bloqueo</h3><p>No existen incidentes relacionados, procedimientos P3/P5 ni bloqueo automático por acumulación de penalizaciones.</p></article>
+        </div>
+        <div class="callout"><p><strong>Limitación temporal:</strong> R16 y R17 funcionan al invocar sus procedimientos, pero el repositorio no incluye un planificador como <span class="mono">pg_cron</span>. La suite lo informa como dependencia externa.</p></div>
+      </section>
+
+      <section class="chapter searchable" id="commits" data-search="commits historia evolución hashes">
+        <div class="kicker">Historia sin commits de skill</div>
+        <h2>Cómo evolucionó la rama.</h2>
+        <p class="intro">La lista conserva únicamente los commits funcionales y documentales relevantes para el TP. El dossier HTML anterior fue útil como primera fotografía, pero quedó reemplazado porque describía un motor previo a la integración.</p>
+        <div class="commit-list">
+          <article class="commit"><span class="hash">80f2232</span><div><h3>Harness transaccional</h3><p>Creó la infraestructura sobre la que funciona toda la rama.</p><ul><li>Runner único con transacción y rollback.</li><li>Resultados, métricas y matriz de cobertura temporales.</li><li>Snapshots del estado base y utilidades para resolver catálogos sin IDs fijos.</li></ul></div></article>
+          <article class="commit"><span class="hash">58fec2a</span><div><h3>Reconstrucción de escenarios</h3><p>Eliminó siete demostraciones manuales y las reemplazó por módulos verificables.</p><ul><li>Agregó preflight, asignación, ciclo de vida, validaciones, IoT, saturación y brechas.</li><li>Cada módulo captura errores inesperados y registra evidencia.</li></ul></div></article>
+          <article class="commit"><span class="hash">13e43dd</span><div><h3>Ráfaga de veinte</h3><p>Convirtió el requisito obligatorio en una carga determinística.</p><ul><li>Crea veinte pares tipo/zona únicos en una sentencia.</li><li>Induce éxitos y fallas repetibles y mide atención, pendientes, resolución y reasignación.</li></ul></div></article>
+          <article class="commit"><span class="hash">613322e</span><div><h3>Reporte operativo</h3><p>Transformó la evidencia técnica en una salida apta para entrega y defensa.</p><ul><li>Veredicto, resumen de estados y matriz R1–R21/P1–P5.</li><li>Indicadores de SLA, recursos, penalizaciones, ranking, auditoría y brechas.</li></ul></div></article>
+          <article class="commit"><span class="hash">64dad1f</span><div><h3>Validaciones de tipo y zona</h3><p>Cerró dos caminos que podían producir falsos positivos.</p><ul><li>Prueba recurso de tipo incompatible.</li><li>Prueba recurso no habilitado para la zona y agrega cobertura al reporte.</li></ul></div></article>
+          <article class="commit"><span class="hash">019c43c</span><div><h3>Guía de ejecución</h3><p>Documentó cómo operar y explicar la suite.</p><ul><li>Describe arquitectura, estados de resultado, flujo funcional y escenarios.</li><li>Advierte sobre locks, simultaneidad lógica y brechas conocidas.</li></ul></div></article>
+          <article class="commit"><span class="hash">38ec8d6</span><div><h3>Restauración de secuencias</h3><p>Corrigió una huella que el rollback por sí solo no eliminaba.</p><ul><li>Captura valor y estado de uso de las secuencias operativas.</li><li>Las restaura antes del rollback para dejar la base realmente igual.</li></ul></div></article>
+          <article class="commit"><span class="hash">7d901d8</span><div><h3>Primer dossier HTML</h3><p>Creó la primera documentación visual por commit.</p><ul><li>Sirvió como fotografía de la etapa previa a la integración.</li><li>Luego fue reemplazado porque sus conclusiones pertenecían al motor anterior.</li></ul></div></article>
+          <article class="commit"><span class="hash">c9af47b</span><div><h3>Integración del motor activo</h3><p>Incorporó selectivamente el conocimiento funcional de <span class="mono">dev/create-triggers</span>.</p><ul><li>Alineó esquema, dataset, vistas, migración y Docker.</li><li>Adoptó capacidad por zona, ciclo En tránsito/Ocupado, R15, reglas temporales, decisiones y penalización proporcional.</li></ul></div></article>
+          <article class="commit"><span class="hash">5877fbf</span><div><h3>Validación del motor integrado</h3><p>Reescribió la suite para comprobar el motor recién incorporado.</p><ul><li>Adaptó estados, capacidad, IoT y harness.</li><li>Reforzó R15 y reemplazó las brechas antiguas por capacidades avanzadas R16, R17 y P4.</li></ul></div></article>
+          <article class="commit"><span class="hash">7766243</span><div><h3>Presentación de cobertura integrada</h3><p>Actualizó reporte y README para que describieran el nuevo sistema.</p><ul><li>Incorporó cobertura de capacidades avanzadas y decisiones.</li><li>Eliminó explicaciones que ya no correspondían al motor final.</li></ul></div></article>
+          <article class="commit"><span class="hash">3387c0f</span><div><h3>Auditoría final de coherencia</h3><p>Contrastó nuevamente consigna, motor, escenarios, reporte y tests.</p><ul><li>Eliminó IDs y candidatos asumidos, probó P1 y reforzó R15/R20.</li><li>Sinceró R18/R19/R20, documentó scheduler externo y alineó tests heredados.</li></ul></div></article>
+          <article class="commit"><span class="hash">df9cfe4</span><div><h3>Reescritura del dossier final</h3><p>Reemplazó la documentación visual obsoleta por una explicación del sistema integrado.</p><ul><li>Documentó la integración selectiva, arquitectura, escenarios y cobertura honesta.</li><li>Esta revisión amplía ese dossier con inventario y bitácora completa de hallazgos.</li></ul></div></article>
+        </div>
+      </section>
+
+      <section class="chapter searchable" id="auditoria" data-search="auditoria final correcciones coherencia limitaciones">
+        <div class="kicker">Doble check final</div>
+        <h2>Qué se corrigió en la última revisión.</h2>
+        <div class="grid-2">
+          <article class="card"><h3>IDs y candidatos</h3><p>La ráfaga dejó de asumir IDs consecutivos de gravedad. Los escenarios de inteligencia y validación ahora exigen recursos realmente disponibles.</p></article>
+          <article class="card"><h3>P1 funcional</h3><p>La matriz dejó de aprobar P1 solo por existir. Ahora crea un incidente pendiente, invoca el procedimiento y comprueba la asignación diferida.</p></article>
+          <article class="card"><h3>Cobertura parcial</h3><p>R18, R19 y R20 se marcan como XFAIL parciales cuando no alcanzan el texto exacto de la consigna.</p></article>
+          <article class="card"><h3>Tests alineados</h3><p>Se reemplazaron triggers obsoletos, el umbral global eliminado y expectativas incorrectas de estado <span class="mono">Ocupado</span>.</p></article>
+        </div>
+        <div class="callout"><p><strong>Verificación disponible:</strong> análisis de archivos, referencias, includes, bloques SQL, commits y consistencia contra la consigna PDF. No fue posible ejecutar PostgreSQL localmente porque esta máquina no dispone de <span class="mono">psql</span> ni Docker.</p></div>
+        <footer>Documento final generado para la rama <span class="mono">dev/simulacion</span>. Excluye deliberadamente los commits de la skill de commits.</footer>
+      </section>
+    </main>
+  </div>
+
+  <script>
+    const root = document.documentElement;
+    const savedTheme = localStorage.getItem("dossier-theme");
+    if (savedTheme) root.dataset.theme = savedTheme;
+    document.querySelector("#theme").addEventListener("click", () => {
+      root.dataset.theme = root.dataset.theme === "dark" ? "" : "dark";
+      localStorage.setItem("dossier-theme", root.dataset.theme);
+    });
+    document.querySelector("#print").addEventListener("click", () => window.print());
+    addEventListener("scroll", () => {
+      const max = document.documentElement.scrollHeight - innerHeight;
+      document.querySelector("#progress").style.width = `${max ? scrollY / max * 100 : 0}%`;
+    }, { passive: true });
+    const links = [...document.querySelectorAll(".nav-link")];
+    const sections = [...document.querySelectorAll("main section")];
+    const observer = new IntersectionObserver(entries => {
+      entries.forEach(entry => {
+        if (!entry.isIntersecting) return;
+        links.forEach(link => link.classList.toggle("active", link.hash === `#${entry.target.id}`));
+      });
+    }, { rootMargin: "-20% 0px -70%" });
+    sections.forEach(section => observer.observe(section));
+    document.querySelector("#search").addEventListener("input", event => {
+      const query = event.target.value.trim().toLowerCase();
+      document.querySelectorAll(".searchable").forEach(section => {
+        section.classList.toggle("hidden", query && !section.textContent.toLowerCase().includes(query));
+      });
+    });
+  </script>
+</body>
+</html>

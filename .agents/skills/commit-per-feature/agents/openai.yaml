@@ -1,0 +1,4 @@
+interface:
+  display_name: "Commit Per Feature"
+  short_description: "Create verified atomic feature commits"
+  default_prompt: "Use $commit-per-feature to commit the completed feature atomically."

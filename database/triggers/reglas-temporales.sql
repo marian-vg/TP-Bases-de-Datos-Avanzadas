@@ -37,6 +37,8 @@ $$;
 -- R17. sp_ReactivarRecursos
 -- Reactivación automática: Un recurso "Fuera de servicio" vuelve a "Disponible"
 -- tras superar los minutos definidos en MINUTOS_REACTIVACION_RECURSO.
+-- Se ancla a la ÚLTIMA salida registrada en el Log (MAX timestamp) para evitar
+-- que una salida vieja de un ciclo anterior dispare la reactivación de inmediato.
 -- ============================================================================
 CREATE OR REPLACE PROCEDURE sp_ReactivarRecursos()
 LANGUAGE plpgsql
@@ -48,28 +50,22 @@ DECLARE
 BEGIN
     SELECT id_estado_recurso INTO v_estado_fuera FROM EstadoRecurso WHERE nombre = 'Fuera de servicio';
     SELECT id_estado_recurso INTO v_estado_disponible FROM EstadoRecurso WHERE nombre = 'Disponible';
-    
+
     SELECT COALESCE(
-        (SELECT numero FROM ParametrosSistema WHERE nombre_parametro = 'MINUTOS_REACTIVACION_RECURSO'), 
+        (SELECT numero FROM ParametrosSistema WHERE nombre_parametro = 'MINUTOS_REACTIVACION_RECURSO'),
         60
     ) INTO v_minutos;
 
     UPDATE Recurso r
     SET fk_estado_recurso_id = v_estado_disponible
     WHERE fk_estado_recurso_id = v_estado_fuera
-      AND EXISTS (
-          SELECT 1
-          FROM (
-              SELECT (l.detalle->'despues'->>'fk_estado_recurso_id')::int AS estado, l.timestamp
-              FROM Log l
-              WHERE l.tablaAfectada = 'recurso' 
-                AND l.idTablaAfectada = r.id_recurso
-                AND l.operacion = 'UPDATE'
-              ORDER BY l.id_log DESC
-              LIMIT 1
-          ) sub
-          WHERE sub.estado = v_estado_fuera
-            AND sub.timestamp <= CURRENT_TIMESTAMP - (v_minutos * INTERVAL '1 minute')
-      );
+      AND (
+          SELECT MAX(l.timestamp)
+          FROM Log l
+          WHERE l.tablaAfectada = 'recurso'
+            AND l.idTablaAfectada = r.id_recurso
+            AND l.operacion = 'UPDATE'
+            AND (l.detalle->'despues'->>'fk_estado_recurso_id')::int = v_estado_fuera
+      ) <= CURRENT_TIMESTAMP - (v_minutos * INTERVAL '1 minute');
 END;
 $$;

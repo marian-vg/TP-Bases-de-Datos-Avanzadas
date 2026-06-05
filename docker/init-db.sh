@@ -32,4 +32,9 @@ run database/create-tables.sql
 run database/carga-dataset.sql
 run database/create-views.sql
 
+# Reglas activas cargadas desde el master script.
+run database/create-triggers.sql
+run database/store-procedures/asignar-recurso.sql
+run database/store-procedures/cerrar-incidente.sql
+run database/store-procedures/simular-eventos.sql
 echo ">>> Base de datos 'smart_city' inicializada correctamente."

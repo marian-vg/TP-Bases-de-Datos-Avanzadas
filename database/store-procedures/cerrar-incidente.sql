@@ -31,7 +31,7 @@ BEGIN
     END IF;
 
     -- Obtener nombres y IDs de estados en una sola consulta agrupada
-    SELECT 
+    SELECT
         (SELECT nombre FROM EstadoIncidente WHERE id_estado_incidente = v_estado_actual),
         (SELECT id_estado_incidente FROM EstadoIncidente WHERE nombre = 'Resuelto'),
         (SELECT id_estado_incidente FROM EstadoIncidente WHERE nombre = 'Cancelado')
@@ -39,7 +39,7 @@ BEGIN
 
     -- Validar que el incidente no este en un estado terminal ya
     IF v_nombre_estado IN ('Resuelto', 'Cancelado') THEN
-        RAISE EXCEPTION 'El incidente con ID % ya se encuentra finalizado o inactivo (Estado: %).', 
+        RAISE EXCEPTION 'El incidente con ID % ya se encuentra finalizado o inactivo (Estado: %).',
             p_id_incidente, v_nombre_estado;
     END IF;
 
@@ -47,7 +47,7 @@ BEGIN
         UPDATE Incidente
         SET fk_estado_incidente_id = v_estado_cancelado
         WHERE id_incidente = p_id_incidente;
-        
+
         RAISE NOTICE 'El incidente % (estado Pendiente) fue finalizado y marcado como Cancelado (R9).', p_id_incidente;
     ELSE
         UPDATE Asignacion
@@ -64,7 +64,7 @@ BEGIN
         WHERE id_incidente = p_id_incidente
           AND fk_estado_incidente_id != v_estado_resuelto;
 
-        RAISE NOTICE 'El incidente % fue cerrado con éxito y se liberaron % recursos asociados.', 
+        RAISE NOTICE 'El incidente % fue cerrado con éxito y se liberaron % recursos asociados.',
             p_id_incidente, v_recursos_liberados;
     END IF;
 END;

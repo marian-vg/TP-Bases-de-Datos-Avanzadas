@@ -68,7 +68,7 @@ DECLARE
 BEGIN
     -- Obtener ID del estado Resuelto
     SELECT id_estado_incidente INTO v_estado_resuelto FROM EstadoIncidente WHERE nombre = 'Resuelto';
-    
+
     -- Insertar incidente directamente en estado Resuelto
     INSERT INTO Incidente (fk_tipo_incidente_id, fk_gravedad_id, fk_estado_incidente_id, fk_zona_id, descripcion, prioridad)
     VALUES (1, 1, v_estado_resuelto, 1, 'Incidente finalizado de prueba', 1)
@@ -116,9 +116,9 @@ BEGIN
     SELECT id_estado_recurso INTO v_estado_fueraservicio FROM EstadoRecurso WHERE nombre = 'Fuera de servicio';
 
     -- Obtener tipo de recurso compatible para tipo de incidente 1
-    SELECT fk_tipo_recurso_id INTO v_tipo_rec_compatible 
-    FROM TipoIncidenteTipoRecurso 
-    WHERE fk_tipo_incidente_id = 1 
+    SELECT fk_tipo_recurso_id INTO v_tipo_rec_compatible
+    FROM TipoIncidenteTipoRecurso
+    WHERE fk_tipo_incidente_id = 1
     LIMIT 1;
 
     -- 1. Poner temporalmente todos los recursos de la base de datos en 'Fuera de servicio'
@@ -146,10 +146,10 @@ BEGIN
         SELECT id_recurso FROM Recurso WHERE fk_tipo_recurso_id = v_tipo_rec_compatible LIMIT 2
     LOOP
         UPDATE Recurso SET fk_estado_recurso_id = v_estado_disponible WHERE id_recurso = v_recurso_id;
-        
+
         -- Garantizar zona habilitada para el test
-        INSERT INTO ZonaRecurso (id_zona, id_recurso) 
-        VALUES (1, v_recurso_id) 
+        INSERT INTO ZonaRecurso (id_zona, id_recurso)
+        VALUES (1, v_recurso_id)
         ON CONFLICT DO NOTHING;
     END LOOP;
 
@@ -160,7 +160,7 @@ BEGIN
     -- 5. Aserción de resultados esperados:
     --   - Deben haberse asignado 2 recursos.
     --   - El incidente debe haber pasado a 'En proceso'.
-    --   - Los recursos asignados deben estar ahora 'Ocupado'.
+    --   - Los recursos asignados deben estar ahora 'En tránsito' hasta registrar el arribo.
     SELECT COUNT(*) INTO v_n_asig FROM Asignacion WHERE fk_incidente_id = v_incidente AND timestamp_finalizacion IS NULL;
     IF v_n_asig <> 2 THEN
         RAISE EXCEPTION 'FALLO: sp_AsignarRecurso debía asignar 2 recursos, asignó %', v_n_asig;
@@ -175,10 +175,10 @@ BEGIN
     FROM Asignacion a
     JOIN Recurso r ON a.fk_recurso_id = r.id_recurso
     JOIN EstadoRecurso er ON r.fk_estado_recurso_id = er.id_estado_recurso
-    WHERE a.fk_incidente_id = v_incidente AND er.nombre = 'Ocupado';
+    WHERE a.fk_incidente_id = v_incidente AND er.nombre = 'En tránsito';
 
     IF v_n_asig <> 2 THEN
-        RAISE EXCEPTION 'FALLO: Los recursos asignados debían quedar en estado "Ocupado", pero solo hay %', v_n_asig;
+        RAISE EXCEPTION 'FALLO: Los recursos asignados debían quedar "En tránsito", pero solo hay %', v_n_asig;
     END IF;
 
     RAISE NOTICE 'ÉXITO: Se asignaron los recursos en forma diferida y cambió correctamente el estado del incidente.';
@@ -212,9 +212,9 @@ BEGIN
     SELECT id_estado_recurso INTO v_estado_fueraservicio FROM EstadoRecurso WHERE nombre = 'Fuera de servicio';
 
     -- Obtener tipo compatible
-    SELECT fk_tipo_recurso_id INTO v_tipo_rec_compatible 
-    FROM TipoIncidenteTipoRecurso 
-    WHERE fk_tipo_incidente_id = 1 
+    SELECT fk_tipo_recurso_id INTO v_tipo_rec_compatible
+    FROM TipoIncidenteTipoRecurso
+    WHERE fk_tipo_incidente_id = 1
     LIMIT 1;
 
     -- Poner temporalmente todos los recursos en 'Fuera de servicio'
@@ -296,7 +296,7 @@ DECLARE
     v_bloqueado BOOLEAN := FALSE;
 BEGIN
     SELECT id_estado_incidente INTO v_estado_resuelto FROM EstadoIncidente WHERE nombre = 'Resuelto';
-    
+
     INSERT INTO Incidente (fk_tipo_incidente_id, fk_gravedad_id, fk_estado_incidente_id, fk_zona_id, descripcion, prioridad)
     VALUES (1, 1, v_estado_resuelto, 1, 'Incidente ya resuelto', 1)
     RETURNING id_incidente INTO v_incidente;
@@ -343,9 +343,9 @@ BEGIN
     SELECT id_estado_recurso INTO v_estado_disponible FROM EstadoRecurso WHERE nombre = 'Disponible';
 
     -- Obtener tipo compatible
-    SELECT fk_tipo_recurso_id INTO v_tipo_rec_compatible 
-    FROM TipoIncidenteTipoRecurso 
-    WHERE fk_tipo_incidente_id = 1 
+    SELECT fk_tipo_recurso_id INTO v_tipo_rec_compatible
+    FROM TipoIncidenteTipoRecurso
+    WHERE fk_tipo_incidente_id = 1
     LIMIT 1;
 
     -- Asegurar recursos disponibles
@@ -442,9 +442,9 @@ BEGIN
     CALL sp_CerrarIncidente(v_incidente);
 
     -- Verificar que transitó a Cancelado (R9)
-    SELECT nombre INTO v_estado_actual 
-    FROM Incidente i 
-    JOIN EstadoIncidente e ON i.fk_estado_incidente_id = e.id_estado_incidente 
+    SELECT nombre INTO v_estado_actual
+    FROM Incidente i
+    JOIN EstadoIncidente e ON i.fk_estado_incidente_id = e.id_estado_incidente
     WHERE i.id_incidente = v_incidente;
 
     IF v_estado_actual <> 'Cancelado' THEN
@@ -461,9 +461,9 @@ $$;
 
 
 -- ----------------------------------------------------------------------------
--- PRUEBA 9: sp_SimularEventoSensor - Casos de Error (Sensor/Evento inexistentes)
+-- PRUEBA 9: sp_SimularEventos - Casos de Error (Sensor/Evento inexistentes)
 -- ----------------------------------------------------------------------------
-\echo '>>> PRUEBA 9: sp_SimularEventoSensor validación de parámetros inválidos'
+\echo '>>> PRUEBA 9: sp_SimularEventos validación de parámetros inválidos'
 
 DO $$
 DECLARE
@@ -473,13 +473,13 @@ BEGIN
     -- 9.1 Sensor Inexistente
     v_bloqueado := FALSE;
     BEGIN
-        CALL sp_SimularEventoSensor(-9999, 1);
+        CALL sp_SimularEventos(-9999, 1);
     EXCEPTION WHEN OTHERS THEN
         v_bloqueado := TRUE;
         RAISE NOTICE '   (Bloqueo correcto sensor: %)', SQLERRM;
     END;
     IF NOT v_bloqueado THEN
-        RAISE EXCEPTION 'FALLO: sp_SimularEventoSensor no falló ante un ID de sensor inválido.';
+        RAISE EXCEPTION 'FALLO: sp_SimularEventos no falló ante un ID de sensor inválido.';
     END IF;
 
     -- Obtener un sensor existente
@@ -488,13 +488,13 @@ BEGIN
     -- 9.2 Tipo Evento Inexistente
     v_bloqueado := FALSE;
     BEGIN
-        CALL sp_SimularEventoSensor(v_sensor, -9999);
+        CALL sp_SimularEventos(v_sensor, -9999);
     EXCEPTION WHEN OTHERS THEN
         v_bloqueado := TRUE;
         RAISE NOTICE '   (Bloqueo correcto tipo evento: %)', SQLERRM;
     END;
     IF NOT v_bloqueado THEN
-        RAISE EXCEPTION 'FALLO: sp_SimularEventoSensor no falló ante un ID de tipo de evento inválido.';
+        RAISE EXCEPTION 'FALLO: sp_SimularEventos no falló ante un ID de tipo de evento inválido.';
     END IF;
 
     RAISE NOTICE 'ÉXITO: Se validaron correctamente los parámetros de sensor y tipo de evento.';
@@ -503,9 +503,9 @@ $$;
 
 
 -- ----------------------------------------------------------------------------
--- PRUEBA 10: sp_SimularEventoSensor - Caso Exitoso (Mapeo Único y Asignación)
+-- PRUEBA 10: sp_SimularEventos - Caso Exitoso (Mapeo Único y Asignación)
 -- ----------------------------------------------------------------------------
-\echo '>>> PRUEBA 10: sp_SimularEventoSensor simulación de evento con promoción única'
+\echo '>>> PRUEBA 10: sp_SimularEventos simulación de evento con promoción única'
 
 DO $$
 DECLARE
@@ -534,8 +534,8 @@ BEGIN
     VALUES (v_sensor, CURRENT_DATE);
 
     -- Ejecutamos la simulación
-    RAISE NOTICE '   Invocando sp_SimularEventoSensor para sensor % y tipo evento %...', v_sensor, v_tipo_evento;
-    CALL sp_SimularEventoSensor(v_sensor, v_tipo_evento);
+    RAISE NOTICE '   Invocando sp_SimularEventos para sensor % y tipo evento %...', v_sensor, v_tipo_evento;
+    CALL sp_SimularEventos(v_sensor, v_tipo_evento);
 
     -- Comprobar que:
     --   1. Se insertó un Evento.
@@ -560,9 +560,9 @@ $$;
 
 
 -- ----------------------------------------------------------------------------
--- PRUEBA 11: sp_SimularEventoSensor - Caso Mapeo Múltiple (No Promoción)
+-- PRUEBA 11: sp_SimularEventos - Caso Mapeo Múltiple (No Promoción)
 -- ----------------------------------------------------------------------------
-\echo '>>> PRUEBA 11: sp_SimularEventoSensor simulación de evento con mapeo no único (No-Op)'
+\echo '>>> PRUEBA 11: sp_SimularEventos simulación de evento con mapeo no único (No-Op)'
 
 DO $$
 DECLARE
@@ -583,8 +583,8 @@ BEGIN
     VALUES (v_sensor, CURRENT_DATE);
 
     -- Ejecutamos la simulación
-    RAISE NOTICE '   Invocando sp_SimularEventoSensor con mapeo múltiple (sensor %, tipo evento %)...', v_sensor, v_tipo_evento;
-    CALL sp_SimularEventoSensor(v_sensor, v_tipo_evento);
+    RAISE NOTICE '   Invocando sp_SimularEventos con mapeo múltiple (sensor %, tipo evento %)...', v_sensor, v_tipo_evento;
+    CALL sp_SimularEventos(v_sensor, v_tipo_evento);
 
     -- Comprobar que:
     --   1. Se registró el evento.

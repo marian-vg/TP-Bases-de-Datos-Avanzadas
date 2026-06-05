@@ -30,8 +30,9 @@ SELECT setval(pg_get_serial_sequence('incidente', 'id_incidente'), COALESCE(MAX(
 SELECT setval(pg_get_serial_sequence('asignacion', 'id_asignacion'), COALESCE(MAX(id_asignacion), 1)) FROM Asignacion;
 
 -- Aislamiento: apagamos las reglas de automatización para probar las validaciones puras.
-ALTER TABLE Incidente  DISABLE TRIGGER tg_incidente_auto_asignacion;
-ALTER TABLE Asignacion DISABLE TRIGGER tg_gestion_asignacion;
+ALTER TABLE Incidente  DISABLE TRIGGER trg_asignacion_automatica;
+ALTER TABLE Asignacion DISABLE TRIGGER trg_asignacion_aplicada;
+ALTER TABLE Asignacion DISABLE TRIGGER trg_asignacion_finalizada;
 
 -- ----------------------------------------------------------------------------
 -- PRUEBA 1: REGLA 8 - VALIDACIÓN DE DISPONIBILIDAD DE RECURSOS
@@ -339,8 +340,9 @@ END;
 $$;
 
 -- Rehabilitar las reglas de automatización que apagamos al inicio.
-ALTER TABLE Incidente  ENABLE TRIGGER tg_incidente_auto_asignacion;
-ALTER TABLE Asignacion ENABLE TRIGGER tg_gestion_asignacion;
+ALTER TABLE Incidente  ENABLE TRIGGER trg_asignacion_automatica;
+ALTER TABLE Asignacion ENABLE TRIGGER trg_asignacion_aplicada;
+ALTER TABLE Asignacion ENABLE TRIGGER trg_asignacion_finalizada;
 
 \echo '--------------------------------------------------'
 \echo 'PRUEBAS FINALIZADAS'
