@@ -1,4 +1,6 @@
+\if :{?sim_verbose}
 \echo '>>> 02 - ASIGNACION E INTELIGENCIA'
+\endif
 
 SELECT pg_temp.sim_reset_operativo();
 

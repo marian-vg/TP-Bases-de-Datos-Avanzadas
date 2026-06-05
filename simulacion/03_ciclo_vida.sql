@@ -1,4 +1,6 @@
+\if :{?sim_verbose}
 \echo '>>> 03 - CICLO DE VIDA OPERATIVO'
+\endif
 
 SELECT pg_temp.sim_reset_operativo();
 

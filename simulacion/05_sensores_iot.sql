@@ -1,4 +1,6 @@
+\if :{?sim_verbose}
 \echo '>>> 05 - SENSORES IOT'
+\endif
 
 SELECT pg_temp.sim_reset_operativo();
 

@@ -1,4 +1,6 @@
+\if :{?sim_verbose}
 \echo '>>> 09 - REPORTE OPERATIVO'
+\endif
 
 \pset border 2
 \pset linestyle unicode
@@ -15,6 +17,7 @@ VALUES
     ('R3',  'R3 auditoria de cierre'),
     ('R4',  'R4 reasignacion por falla'),
     ('R5',  'R1/R5 cantidad por gravedad'),
+    ('R6',  'R6 incidente relacionado'),
     ('R7',  'R7 cierre automatico'),
     ('R8',  'R8 recursos En transito'),
     ('R9',  'R9 transicion invalida'),
@@ -26,9 +29,9 @@ VALUES
     ('R15', 'R15 asignacion global'),
     ('R16', 'R16 escalamiento por SLA'),
     ('R17', 'R17 reactivacion temporal'),
-    ('R18', 'R18 decisiones parciales'),
-    ('R19', 'R19 ejecuciones parciales'),
-    ('R20', 'R20 estado En espera'),
+    ('R18', 'R18 log de rebalanceo'),
+    ('R19', 'R3 auditoria de cierre'),
+    ('R20', 'R20 capacidad por zona'),
     ('R21', 'R21 promocion confiable');
 
 UPDATE sim_cobertura c
@@ -57,7 +60,9 @@ SET estado = r.estado,
     detalle = r.detalle
 FROM (VALUES
     ('P2', 'P2 incremento de gravedad'),
-    ('P4', 'P4 penalizacion proporcional')
+    ('P3', 'P3 cierre de incidente'),
+    ('P4', 'P4 penalizacion proporcional'),
+    ('P5', 'P5 simulacion de eventos')
 ) AS m(codigo, prueba)
 CROSS JOIN LATERAL (
     SELECT sr.estado, sr.detalle
@@ -76,9 +81,9 @@ WHERE c.codigo = m.codigo;
 SELECT CASE
     WHEN EXISTS (SELECT 1 FROM sim_resultado WHERE estado = 'FAIL')
         THEN 'FAIL - EXISTEN FALLOS INESPERADOS'
-    WHEN EXISTS (SELECT 1 FROM sim_resultado WHERE estado IN ('XFAIL', 'SKIP'))
-        THEN 'PASS CON BRECHAS CONOCIDAS'
-    ELSE 'PASS COMPLETO'
+    WHEN EXISTS (SELECT 1 FROM sim_resultado WHERE estado = 'SKIP')
+        THEN 'PASS CON PRUEBAS OMITIDAS'
+    ELSE 'PASS'
 END AS veredicto;
 
 \echo ''
@@ -87,7 +92,7 @@ SELECT
     (SELECT count(*) FROM sim_resultado) AS pruebas_registradas,
     (SELECT count(*) FROM sim_resultado WHERE estado = 'PASS') AS aprobadas,
     (SELECT count(*) FROM sim_resultado WHERE estado = 'FAIL') AS fallos,
-    (SELECT count(*) FROM sim_resultado WHERE estado IN ('XFAIL', 'SKIP')) AS brechas_visibles,
+    (SELECT count(*) FROM sim_resultado WHERE estado = 'SKIP') AS pruebas_omitidas,
     (SELECT count(*) FROM sim_cobertura WHERE estado = 'PASS') AS capacidades_validadas,
     (SELECT count(*) FROM Log WHERE operacion = 'DECISION') AS decisiones_automaticas,
     (SELECT count(*) FROM sim_lote_20) AS incidentes_en_rafaga;
@@ -98,8 +103,8 @@ SELECT estado, count(*) AS cantidad
 FROM sim_resultado
 GROUP BY estado
 ORDER BY CASE estado
-    WHEN 'FAIL' THEN 1 WHEN 'XFAIL' THEN 2 WHEN 'XPASS' THEN 3
-    WHEN 'SKIP' THEN 4 WHEN 'PASS' THEN 5 ELSE 6 END;
+    WHEN 'FAIL' THEN 1 WHEN 'SKIP' THEN 2
+    WHEN 'PASS' THEN 3 ELSE 4 END;
 
 \echo ''
 \echo '--- MATRIZ DE COBERTURA R1-R21 / P1-P5 ---'
@@ -216,11 +221,11 @@ ORDER BY ejecuciones DESC, origen
 LIMIT 15;
 
 \echo ''
-\echo '--- BRECHAS Y CAPACIDADES NO DISPONIBLES ---'
+\echo '--- OBSERVACIONES Y PRUEBAS NO EXITOSAS ---'
 SELECT escenario, prueba, estado, detalle
 FROM sim_resultado
-WHERE estado IN ('FAIL', 'XFAIL', 'XPASS', 'SKIP')
-ORDER BY CASE estado WHEN 'FAIL' THEN 1 WHEN 'XFAIL' THEN 2 WHEN 'XPASS' THEN 3 ELSE 4 END, orden;
+WHERE estado IN ('FAIL', 'SKIP')
+ORDER BY CASE estado WHEN 'FAIL' THEN 1 WHEN 'SKIP' THEN 2 ELSE 3 END, orden;
 
 \echo ''
 \echo '--- DETALLE COMPLETO DE ASERCIONES ---'

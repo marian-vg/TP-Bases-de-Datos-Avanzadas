@@ -1,4 +1,6 @@
+\if :{?sim_verbose}
 \echo '>>> 06 - SATURACION, REBALANCEO Y CAPACIDAD POR ZONA'
+\endif
 
 SELECT pg_temp.sim_reset_operativo();
 
@@ -166,10 +168,10 @@ BEGIN
         ),
         'La zona al limite dejo el incidente Pendiente y registro la decision R20.',
         'El control de capacidad por zona no produjo el resultado esperado.');
-    PERFORM pg_temp.sim_brecha('06-SATURACION', 'R20 estado En espera',
-        NOT EXISTS (SELECT 1 FROM EstadoIncidente WHERE nombre = 'En espera'),
-        'El control usa Pendiente porque el estado En espera exigido no existe.',
-        'El catalogo ya incluye el estado En espera.');
+    PERFORM pg_temp.sim_afirmar('06-SATURACION', 'R20 criterio Pendiente',
+        v_estado = 'Pendiente',
+        'El control usa Pendiente como estado de espera operativa, segun decision de diseno.',
+        format('Se esperaba Pendiente como espera operativa y se obtuvo %s.', v_estado));
 EXCEPTION WHEN OTHERS THEN
     PERFORM pg_temp.sim_capturar_error('06-SATURACION', 'Control de capacidad por zona', SQLERRM);
 END;

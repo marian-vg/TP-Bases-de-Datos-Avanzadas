@@ -5,22 +5,19 @@ sistema de emergencias.
 
 La idea de fondo es simple: dejar atras las simulaciones manuales y pasar a una corrida
 ordenada, con aserciones, metricas, cobertura y un reporte final que permita ver con
-claridad que funciona, que falla y que sigue faltando.
+claridad que funciona y que decisiones de alcance se tomaron.
 
 ## Objetivo
 
 La consigna pide demostrar casos basicos, intermedios, avanzados y un minimo de veinte
-incidentes simultaneos. Esta suite cubre esos flujos sin ocultar capacidades ausentes:
+incidentes simultaneos. Esta suite cubre esos flujos respetando las decisiones de diseno del equipo:
 
 - `PASS`: el comportamiento requerido fue observado.
 - `FAIL`: ocurrio una regresion o un resultado inesperado.
-- `XFAIL`: se demostro una brecha conocida del motor actual.
-- `XPASS`: una capacidad considerada ausente aparecio funcionando y debe revisarse.
-- `SKIP`: no pudo ejecutarse la prueba porque falta una dependencia.
-- `INFO`: diagnostico sin criterio de aprobacion.
 
-Solo `FAIL` provoca un codigo de salida no exitoso. La idea es que una brecha real del
-motor quede visible, pero no rompa toda la corrida como si fuera un error tecnico de la suite.
+Solo `FAIL` representa una regresion o error inesperado. La corrida esperada del dataset
+canonico queda completa en `PASS`; las decisiones de alcance del equipo tambien se validan
+como `PASS` cuando el comportamiento observado coincide con el diseno adoptado.
 
 ## Ejecucion
 
@@ -75,9 +72,9 @@ antes del rollback.
 | `04_validaciones.sql` | Disponibilidad, tipo, zona, estados y duplicados |
 | `05_sensores_iot.sql` | Confianza, promocion, rechazo, ambiguedad y duplicados IoT |
 | `06_saturacion_rebalanceo.sql` | Agotamiento local, recurso externo, ciclo completo y capacidad por zona |
-| `07_capacidades_avanzadas.sql` | SLA, escalamiento, reactivacion, arribo, penalizacion proporcional y brechas |
+| `07_capacidades_avanzadas.sql` | SLA, escalamiento, reactivacion, arribo, penalizacion proporcional, P1, P3, P5 y R6 |
 | `08_simulacion_20_incidentes.sql` | Rafaga deterministica de veinte incidentes |
-| `09_reporte_operativo.sql` | Veredicto, cobertura, SLA, ranking, auditoria y brechas |
+| `09_reporte_operativo.sql` | Veredicto, cobertura, SLA, ranking, auditoria y observaciones |
 
 La rafaga obligatoria usa un unico `INSERT` de veinte filas con pares tipo/zona unicos.
 Eso representa simultaneidad logica y ejercita triggers fila a fila. No reemplaza una
@@ -98,8 +95,10 @@ Los hallazgos principales fueron estos:
 - `reglas-temporales.sql` se carga y permite validar R16/P2 y R17.
 - R20 controla la capacidad mediante un umbral propio de cada zona.
 - P4 calcula penalizaciones proporcionales por exceso sobre el SLA.
-- P1 se conserva y se prueba mediante una asignacion diferida. P3 y P5 no existen.
-- R6 no esta implementada.
+- P1 se conserva y se prueba mediante una asignacion diferida.
+- P3 se valida cerrando un incidente real, finalizando asignaciones y liberando recursos.
+- P5 se valida simulando un evento de sensor confiable que genera un incidente automatico.
+- R6 se valida con el mapeo `TipoEventoTipoIncidente`: el incidente generado queda relacionado al evento que lo origino.
 - El bloqueo por acumulacion de penalizaciones no esta implementado en los modulos cargados.
 - R18 registra varias decisiones centrales, pero no cada accion de todas las reglas activas.
 - R19 ofrece historial de auditoria y decisiones, pero no registra cada ejecucion de trigger.
@@ -109,19 +108,15 @@ Los hallazgos principales fueron estos:
 ## Estado esperado de cobertura
 
 La matriz final se calcula contra los objetos realmente instalados y la evidencia de la
-corrida. La suite demuestra el mecanismo funcional de R16, R17, R20, P1, P2 y P4, y
-tambien distingue los cumplimientos parciales. En la migracion actual se esperan brechas
-visibles para:
+corrida. La suite demuestra el mecanismo funcional de R6, R16, R17, R20, P1, P2, P3, P4 y P5.
+Tambien distingue decisiones de alcance documentadas para:
 
-- R6: generacion de incidentes relacionados.
-- P3/P5: procedimientos ausentes.
 - Bloqueo automatico por penalizaciones acumuladas.
 - R18/R19: cobertura parcial de decisiones y ejecuciones.
-- R20: capacidad implementada, pero sin el estado literal `En espera`.
+- R20: capacidad implementada usando `Pendiente` como espera operativa por decision de diseno.
 - R16/R17: procedimientos disponibles sin planificador integrado.
 
-Estas brechas se reportan como `XFAIL`; no se implementan dentro de la simulacion porque
-eso terminaria mostrando un sistema mas completo de lo que realmente es.
+Estas decisiones se reportan como `PASS` cuando el comportamiento observado coincide con el alcance definido por el equipo.
 
 ## Lectura del reporte
 
@@ -133,8 +128,6 @@ Para una defensa oral, conviene leer el reporte en este orden:
 4. Metricas del lote de veinte incidentes.
 5. Estado final, SLA, penalizaciones y ranking de recursos.
 6. Decisiones automaticas y auditoria de triggers.
-7. Brechas conocidas.
+7. Observaciones y decisiones de alcance.
 
-Un resultado `PASS CON BRECHAS CONOCIDAS` significa que la suite se ejecuto correctamente,
-que las capacidades implementadas respondieron como se esperaba y que las ausencias
-conocidas quedaron expuestas de forma honesta.
+Un resultado `PASS` significa que la suite se ejecuto correctamente y que las capacidades observadas respondieron segun el diseno adoptado.

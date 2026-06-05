@@ -3,3 +3,5 @@ __pycache__
 .vscode
 walkthrough.md
 .agents/
+simulacion/logs/*
+!simulacion/logs/.gitkeep

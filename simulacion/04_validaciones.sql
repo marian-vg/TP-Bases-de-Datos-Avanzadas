@@ -1,4 +1,6 @@
+\if :{?sim_verbose}
 \echo '>>> 04 - VALIDACIONES DE INTEGRIDAD'
+\endif
 
 SELECT pg_temp.sim_reset_operativo();
 

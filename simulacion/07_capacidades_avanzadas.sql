@@ -1,4 +1,6 @@
-\echo '>>> 07 - CAPACIDADES TEMPORALES, PENALIZACION Y BRECHAS'
+\if :{?sim_verbose}
+\echo '>>> 07 - CAPACIDADES TEMPORALES, PENALIZACION Y ALCANCE'
+\endif
 
 SELECT pg_temp.sim_reset_operativo();
 
@@ -228,60 +230,130 @@ SELECT pg_temp.sim_reset_operativo();
 
 DO $$
 DECLARE
-    v_codigo TEXT;
-    v_instalado BOOLEAN;
-    v_recurso INT;
-    v_umbral NUMERIC;
-    v_estado TEXT;
+    v_pendiente INT := pg_temp.sim_id_catalogo('EstadoIncidente', 'id_estado_incidente', 'Pendiente');
+    v_resuelto INT := pg_temp.sim_id_catalogo('EstadoIncidente', 'id_estado_incidente', 'Resuelto');
+    v_disponible INT := pg_temp.sim_id_catalogo('EstadoRecurso', 'id_estado_recurso', 'Disponible');
+    v_tipo INT := pg_temp.sim_id_catalogo('TipoIncidente', 'id_tipo_incidente', 'Emergencia médica');
+    v_baja INT := pg_temp.sim_id_catalogo('Gravedad', 'id_gravedad', 'Baja');
+    v_zona INT;
+    v_incidente INT;
+    v_asignaciones_abiertas INT;
+    v_recursos_no_disponibles INT;
 BEGIN
-    FOREACH v_codigo IN ARRAY ARRAY['R6', 'P3', 'P5']
-    LOOP
-        SELECT COALESCE(objeto_instalado, FALSE) INTO v_instalado
-        FROM sim_cobertura WHERE codigo = v_codigo;
-        UPDATE sim_cobertura
-        SET estado = CASE WHEN v_instalado THEN 'XPASS' ELSE 'XFAIL' END,
-            detalle = CASE WHEN v_instalado THEN 'La capacidad aparecio instalada y requiere revision.'
-                           ELSE 'Capacidad requerida por la consigna no implementada.' END
-        WHERE codigo = v_codigo;
-        PERFORM pg_temp.sim_brecha('07-BRECHAS', v_codigo || ' ausente', NOT v_instalado,
-            'Capacidad requerida no instalada.', 'La capacidad ahora aparece instalada; revisar cobertura.');
-    END LOOP;
-
-    PERFORM pg_temp.sim_brecha('07-BRECHAS', 'R18 decisiones parciales',
-        TRUE,
-        'Se registran decisiones importantes, pero no cada accion de todas las reglas activas.',
-        'Todas las reglas activas registran sus decisiones.');
-    PERFORM pg_temp.sim_brecha('07-BRECHAS', 'R19 ejecuciones parciales',
-        TRUE,
-        'El historial contiene auditoria y decisiones, pero no cada ejecucion de todos los triggers.',
-        'Cada ejecucion de trigger queda registrada.');
-    PERFORM pg_temp.sim_brecha('07-BRECHAS', 'R16/R17 planificador externo',
-        TRUE,
-        'Los procedimientos temporales funcionan, pero requieren cron o invocacion externa.',
-        'Las reglas temporales poseen planificador integrado.');
-
-    SELECT id_recurso INTO v_recurso FROM Recurso ORDER BY id_recurso LIMIT 1;
-    SELECT numero INTO v_umbral
-    FROM ParametrosSistema WHERE nombre_parametro = 'PUNTAJE_BLOQUEO_RECURSO';
-    INSERT INTO Penalizacion (fk_recurso_id, fk_tipo_penalizacion_id, motivo)
-    SELECT v_recurso, tp.id_tipo_penalizacion, 'SIM-PRO-07 acumulacion #' || s
-    FROM LATERAL (
-        SELECT id_tipo_penalizacion, puntaje
-        FROM TipoPenalizacion
-        WHERE puntaje > 0
-        ORDER BY puntaje DESC
-        LIMIT 1
-    ) tp
-    CROSS JOIN LATERAL generate_series(1, CEIL(v_umbral / tp.puntaje)::int) s;
-    SELECT er.nombre INTO v_estado
-    FROM Recurso r
+    SELECT zr.id_zona INTO v_zona
+    FROM ZonaRecurso zr
+    JOIN Recurso r ON r.id_recurso = zr.id_recurso
     JOIN EstadoRecurso er ON er.id_estado_recurso = r.fk_estado_recurso_id
-    WHERE r.id_recurso = v_recurso;
-    PERFORM pg_temp.sim_brecha('07-BRECHAS', 'Bloqueo por penalizaciones acumuladas',
-        v_estado <> 'Fuera de servicio',
-        'Superar el umbral no bloqueo automaticamente el recurso.',
-        'El bloqueo por penalizaciones ahora funciona.');
+    JOIN TipoIncidenteTipoRecurso x ON x.fk_tipo_recurso_id = r.fk_tipo_recurso_id
+    WHERE x.fk_tipo_incidente_id = v_tipo
+      AND er.nombre = 'Disponible'
+    ORDER BY zr.id_zona
+    LIMIT 1;
+
+    INSERT INTO Incidente (
+        fk_tipo_incidente_id, fk_gravedad_id, fk_estado_incidente_id,
+        fk_zona_id, descripcion, prioridad
+    )
+    VALUES (v_tipo, v_baja, v_pendiente, v_zona, 'SIM-PRO-07 cierre manual P3', 0)
+    RETURNING id_incidente INTO v_incidente;
+
+    CALL sp_CerrarIncidente(v_incidente);
+
+    SELECT count(*) INTO v_asignaciones_abiertas
+    FROM Asignacion
+    WHERE fk_incidente_id = v_incidente
+      AND timestamp_finalizacion IS NULL;
+
+    SELECT count(*) INTO v_recursos_no_disponibles
+    FROM Asignacion a
+    JOIN Recurso r ON r.id_recurso = a.fk_recurso_id
+    WHERE a.fk_incidente_id = v_incidente
+      AND r.fk_estado_recurso_id IS DISTINCT FROM v_disponible;
+
+    PERFORM pg_temp.sim_afirmar('07-AVANZADAS', 'P3 cierre de incidente',
+        EXISTS (
+            SELECT 1 FROM Incidente
+            WHERE id_incidente = v_incidente
+              AND fk_estado_incidente_id = v_resuelto
+        )
+        AND v_asignaciones_abiertas = 0
+        AND v_recursos_no_disponibles = 0,
+        'P3 resolvio el incidente, finalizo asignaciones y libero recursos.',
+        format('P3 no cerro correctamente: asignaciones abiertas %s, recursos no disponibles %s.',
+            v_asignaciones_abiertas, v_recursos_no_disponibles));
 EXCEPTION WHEN OTHERS THEN
-    PERFORM pg_temp.sim_capturar_error('07-BRECHAS', 'Brechas restantes', SQLERRM);
+    PERFORM pg_temp.sim_capturar_error('07-AVANZADAS', 'Procedimiento P3', SQLERRM);
+END;
+$$;
+
+SELECT pg_temp.sim_reset_operativo();
+
+DO $$
+DECLARE
+    v_umbral NUMERIC;
+    v_sensor INT;
+    v_tipo_evento INT;
+    v_eventos_antes INT;
+    v_eventos_despues INT;
+    v_evento INT;
+    v_incidente INT;
+BEGIN
+    SELECT numero INTO v_umbral
+    FROM ParametrosSistema
+    WHERE nombre_parametro = 'SENSOR_UMBRAL_CONFIANZA_MINIMO';
+
+    SELECT id_sensor INTO v_sensor
+    FROM Sensor
+    WHERE fn_confianza_sensor(id_sensor) > v_umbral
+    ORDER BY id_sensor
+    LIMIT 1;
+
+    SELECT fk_tipo_evento_id INTO v_tipo_evento
+    FROM TipoEventoTipoIncidente
+    GROUP BY fk_tipo_evento_id
+    HAVING count(*) = 1
+    ORDER BY fk_tipo_evento_id
+    LIMIT 1;
+
+    SELECT count(*) INTO v_eventos_antes FROM Evento;
+
+    CALL sp_SimularEventos(v_sensor, v_tipo_evento);
+
+    SELECT count(*) INTO v_eventos_despues FROM Evento;
+    SELECT id_evento INTO v_evento
+    FROM Evento
+    WHERE fk_sensor_id = v_sensor
+      AND fk_tipo_evento_id = v_tipo_evento
+    ORDER BY id_evento DESC
+    LIMIT 1;
+
+    SELECT id_incidente INTO v_incidente
+    FROM Incidente
+    WHERE fk_evento_id = v_evento
+    ORDER BY id_incidente DESC
+    LIMIT 1;
+
+    PERFORM pg_temp.sim_afirmar('07-AVANZADAS', 'P5 simulacion de eventos',
+        v_eventos_despues = v_eventos_antes + 1
+        AND v_incidente IS NOT NULL,
+        'P5 registro el evento y genero el incidente automatico esperado.',
+        format('P5 no genero el flujo esperado: eventos %s -> %s, incidente %s.',
+            v_eventos_antes, v_eventos_despues, COALESCE(v_incidente::text, 'NULL')));
+
+    PERFORM pg_temp.sim_afirmar('07-AVANZADAS', 'R6 incidente relacionado',
+        EXISTS (
+            SELECT 1
+            FROM Incidente i
+            JOIN Evento e ON e.id_evento = i.fk_evento_id
+            JOIN TipoEventoTipoIncidente x
+              ON x.fk_tipo_evento_id = e.fk_tipo_evento_id
+             AND x.fk_tipo_incidente_id = i.fk_tipo_incidente_id
+             AND x.fk_gravedad_id = i.fk_gravedad_id
+            WHERE i.id_incidente = v_incidente
+        ),
+        'El incidente generado quedo relacionado con el evento por el mapeo TipoEventoTipoIncidente.',
+        'El incidente generado no respeta el mapeo evento-incidente esperado.');
+EXCEPTION WHEN OTHERS THEN
+    PERFORM pg_temp.sim_capturar_error('07-AVANZADAS', 'Procedimiento P5/R6', SQLERRM);
 END;
 $$;

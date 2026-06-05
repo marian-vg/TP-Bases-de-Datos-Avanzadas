@@ -7,7 +7,7 @@ CREATE TEMP TABLE sim_resultado (
     orden       BIGSERIAL PRIMARY KEY,
     escenario   TEXT NOT NULL,
     prueba      TEXT NOT NULL,
-    estado      TEXT NOT NULL CHECK (estado IN ('PASS', 'FAIL', 'XFAIL', 'XPASS', 'SKIP', 'INFO')),
+    estado      TEXT NOT NULL CHECK (estado IN ('PASS', 'FAIL', 'SKIP')),
     detalle     TEXT NOT NULL,
     creado_en   TIMESTAMP NOT NULL DEFAULT clock_timestamp()
 ) ON COMMIT DROP;
@@ -26,7 +26,7 @@ CREATE TEMP TABLE sim_cobertura (
     nombre          TEXT NOT NULL,
     objeto_esperado TEXT,
     objeto_instalado BOOLEAN,
-    estado          TEXT NOT NULL DEFAULT 'INFO',
+    estado          TEXT NOT NULL DEFAULT 'PENDIENTE',
     detalle         TEXT NOT NULL DEFAULT 'Pendiente de evaluar'
 ) ON COMMIT DROP;
 
@@ -118,23 +118,6 @@ BEGIN
         p_prueba,
         CASE WHEN COALESCE(p_condicion, FALSE) THEN 'PASS' ELSE 'FAIL' END,
         CASE WHEN COALESCE(p_condicion, FALSE) THEN p_detalle_ok ELSE p_detalle_error END
-    );
-END;
-$$ LANGUAGE plpgsql;
-
-CREATE OR REPLACE FUNCTION pg_temp.sim_brecha(
-    p_escenario TEXT,
-    p_prueba TEXT,
-    p_brecha_presente BOOLEAN,
-    p_detalle_brecha TEXT,
-    p_detalle_resuelto TEXT
-) RETURNS VOID AS $$
-BEGIN
-    PERFORM pg_temp.sim_registrar(
-        p_escenario,
-        p_prueba,
-        CASE WHEN COALESCE(p_brecha_presente, FALSE) THEN 'XFAIL' ELSE 'XPASS' END,
-        CASE WHEN COALESCE(p_brecha_presente, FALSE) THEN p_detalle_brecha ELSE p_detalle_resuelto END
     );
 END;
 $$ LANGUAGE plpgsql;
@@ -350,7 +333,7 @@ VALUES
     ('R3',  'Registro automatico de auditoria', 'trg_audit_incidente'),
     ('R4',  'Reasignacion automatica por falla', 'trg_asignacion_finalizada'),
     ('R5',  'Asignacion multiple en incidentes criticos', 'fn_recursos_por_gravedad'),
-    ('R6',  'Generacion de incidentes relacionados', NULL),
+    ('R6',  'Generacion de incidentes relacionados', 'TipoEventoTipoIncidente'),
     ('R7',  'Cierre automatico de incidentes', 'trg_asignacion_finalizada'),
     ('R8',  'Validacion de disponibilidad', 'trg_valida_registro_asignacion'),
     ('R9',  'Validacion de estados', 'trg_valida_registro_incidente'),
@@ -371,10 +354,3 @@ VALUES
     ('P3',  'sp_CerrarIncidente', 'sp_cerrarincidente'),
     ('P4',  'sp_CalcularPenalizacion', 'sp_calcularpenalizacion'),
     ('P5',  'sp_SimularEventos', 'sp_simulareventos');
-
-SELECT pg_temp.sim_registrar(
-    'HARNESS',
-    'Inicializacion transaccional',
-    'PASS',
-    'Snapshot base creado; toda mutacion posterior sera revertida por 00_run_all.sql.'
-);

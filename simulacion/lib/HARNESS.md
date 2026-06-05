@@ -15,7 +15,7 @@ En otras palabras, evita que la simulacion quede reducida a una serie de `INSERT
 El harness resuelve cinco necesidades concretas:
 
 1. Registrar resultados.
-   Cada escenario puede dejar un `PASS`, `FAIL`, `XFAIL`, `XPASS`, `SKIP` o `INFO` con un detalle claro.
+   Cada escenario puede dejar un `PASS`, `FAIL` o `SKIP` con un detalle claro.
 
 2. Medir lo que paso.
    Guarda metricas como cantidad de incidentes creados, asignaciones, fallas inducidas o recursos rebalanceados.
@@ -44,7 +44,6 @@ Las funciones mas importantes son:
 
 - `sim_registrar`: registra una fila manualmente en resultados.
 - `sim_afirmar`: registra `PASS` o `FAIL` segun una condicion.
-- `sim_brecha`: registra `XFAIL` o `XPASS` para capacidades ausentes o parciales.
 - `sim_medir`: guarda una metrica.
 - `sim_reset_operativo`: limpia y restaura el entorno entre escenarios.
 - `sim_restaurar_secuencias`: devuelve las secuencias al valor original antes del `ROLLBACK`.
@@ -73,7 +72,7 @@ Tambien conviene dejar claro lo que no hace:
 - No arregla el motor en secreto para que la demo quede linda.
 - No garantiza concurrencia real entre sesiones.
 
-Si una capacidad no existe en el motor, el harness no la fabrica. Solo ayuda a que esa ausencia quede registrada de forma clara como `XFAIL` o `SKIP`, en lugar de romper toda la corrida.
+Si una capacidad no existe en el motor, el harness no la fabrica. La suite registra el alcance validado por el equipo y reserva `FAIL` para regresiones o errores inesperados.
 
 ## Por que era necesario
 
@@ -82,7 +81,7 @@ Sin este archivo, la simulacion quedaba bastante mas fragil:
 - dependia de IDs fijos,
 - mezclaba escenarios entre si,
 - dejaba mas margen para interpretar resultados manualmente,
-- y hacia mas dificil distinguir un error tecnico de una brecha real del motor.
+- y hacia mas dificil distinguir un error tecnico de una decision de alcance.
 
 Con el harness, la suite gana orden, aislamiento, trazabilidad y un reporte final bastante mas defendible.
 
@@ -90,4 +89,4 @@ Con el harness, la suite gana orden, aislamiento, trazabilidad y un reporte fina
 
 Si hubiera que resumirlo en una frase:
 
-> el harness no es parte del sistema Smart City; es la estructura que permite probarlo bien y mostrar con claridad que funciono, que fallo y que sigue faltando.
+> el harness no es parte del sistema Smart City; es la estructura que permite probarlo bien y mostrar con claridad que funciono, que fallo y que queda como decision de alcance.

@@ -1,4 +1,6 @@
+\if :{?sim_verbose}
 \echo '>>> 01 - PREFLIGHT Y CAPACIDADES'
+\endif
 
 DO $$
 DECLARE
@@ -43,18 +45,13 @@ BEGIN
 
         UPDATE sim_cobertura
         SET objeto_instalado = v_instalado,
-            estado = CASE WHEN v_instalado THEN 'INFO' ELSE 'SKIP' END,
+            estado = CASE WHEN v_instalado THEN 'PENDIENTE' ELSE 'SKIP' END,
             detalle = CASE
                 WHEN v_instalado THEN 'Objeto instalado; pendiente de validacion funcional.'
                 ELSE 'Objeto esperado no instalado por la migracion canonica.'
             END
         WHERE codigo = v_codigo;
     END LOOP;
-
-    PERFORM pg_temp.sim_registrar(
-        '01-PREFLIGHT', 'Migracion canonica incompleta', 'INFO',
-        'La existencia de archivos SQL no implica que sus objetos hayan sido cargados en la base.'
-    );
 EXCEPTION WHEN OTHERS THEN
     PERFORM pg_temp.sim_capturar_error('01-PREFLIGHT', 'Ejecucion del preflight', SQLERRM);
 END;

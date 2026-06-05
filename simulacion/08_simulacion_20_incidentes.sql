@@ -1,4 +1,6 @@
+\if :{?sim_verbose}
 \echo '>>> 08 - RAFAGA DETERMINISTICA DE 20 INCIDENTES'
+\endif
 
 SELECT pg_temp.sim_reset_operativo();
 
@@ -131,11 +133,6 @@ BEGIN
     PERFORM pg_temp.sim_medir('08-LOTE20', 'incidentes_resueltos', v_resueltos);
     PERFORM pg_temp.sim_medir('08-LOTE20', 'incidentes_pendientes', v_pendientes);
     PERFORM pg_temp.sim_medir('08-LOTE20', 'decisiones_rebalanceo', v_rebalanceos);
-
-    PERFORM pg_temp.sim_registrar(
-        '08-LOTE20', 'Alcance de simultaneidad', 'INFO',
-        'La rafaga usa un unico INSERT de veinte filas. Prueba reaccion set-based y triggers fila a fila, no concurrencia multisesion.'
-    );
 EXCEPTION WHEN OTHERS THEN
     PERFORM pg_temp.sim_capturar_error('08-LOTE20', 'Escenario completo', SQLERRM);
 END;

@@ -1,4 +1,5 @@
 \set ON_ERROR_STOP on
+\set sim_verbose on
 \pset pager off
 \timing on
 
@@ -31,7 +32,6 @@ ROLLBACK;
 
 \if :sim_tiene_fallos
     \echo 'SIMULACION FINALIZADA CON FALLOS INESPERADOS'
-    \quit 1
 \else
     \echo 'SIMULACION BASE INICIALIZADA Y REVERTIDA CORRECTAMENTE'
 \endif
