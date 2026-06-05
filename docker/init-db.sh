@@ -32,19 +32,8 @@ run database/create-tables.sql
 run database/carga-dataset.sql
 run database/create-views.sql
 
-# Reglas activas en módulos. ORDEN IMPORTANTE:
-#   validadoras  -> validaciones BEFORE (R8/R9/R10/R11 + tipo aplicable)
-#   inteligencia -> mantiene Recurso.puntaje (R14); DEBE ir antes del motor
-#   automatizacion -> motor de asignación y ciclo operativo; ordena por ese puntaje
-#   temporales   -> reglas temporales R16/R17 (procedures para cron/manual)
-#
-# database/create-triggers.sql NO se carga a propósito: es un script de REFERENCIA generado
-# con IA que no respeta las reglas del proyecto. Se conserva solo a mano. Las reglas que vivían
-# ahí ya están implementadas en módulos (R12/R13/R15 en inteligencia, R20 en automatizacion).
-run database/triggers/reglas-validadoras.sql
-run database/triggers/reglas-inteligencia.sql
-run database/triggers/reglas-automatizacion.sql
-run database/triggers/reglas-temporales.sql
+# Reglas activas cargadas desde el master script.
+run database/create-triggers.sql
 run database/store-procedures/asignar-recurso.sql
 run database/store-procedures/cerrar-incidente.sql
 run database/store-procedures/simular-eventos.sql
