@@ -45,3 +45,5 @@
 
 -- 7. Procedimientos almacenados adicionales.
 \ir database/store-procedures/asignar-recurso.sql
+\ir database/store-procedures/cerrar-incidente.sql
+\ir database/store-procedures/simular-eventos.sql

@@ -6,7 +6,7 @@
 # contenedor (cuando el volumen de datos está vacío).
 #
 # Motivo de usar un .sh en lugar de scripts .sql sueltos:
-#   1. Garantiza el orden de ejecución: estructura -> datos -> vistas -> triggers. Los
+#   1. Garantiza el orden de ejecución: estructura -> datos -> vistas. Los
 #      archivos sueltos en docker-entrypoint-initdb.d se ejecutan por orden
 #      alfabético, lo que rompe las dependencias entre scripts.
 #   2. El 'cd /project' permite que las rutas relativas 'data/...' del comando
@@ -14,8 +14,7 @@
 #      modificar los scripts SQL.
 #
 # create-database.sql no se utiliza aquí: la base la crea PostgreSQL a partir
-# de la variable POSTGRES_DB definida en docker-compose.yml. Solo se usa si 
-# el usuario que quiera ejecutar la DB no tiene acceso a docker.
+# de la variable POSTGRES_DB definida en docker-compose.yml.
 # ============================================================================
 
 set -e  # Aborta ante el primer comando con error; evita cargas a medias.
@@ -47,5 +46,6 @@ run database/triggers/reglas-inteligencia.sql
 run database/triggers/reglas-automatizacion.sql
 run database/triggers/reglas-temporales.sql
 run database/store-procedures/asignar-recurso.sql
-
+run database/store-procedures/cerrar-incidente.sql
+run database/store-procedures/simular-eventos.sql
 echo ">>> Base de datos 'smart_city' inicializada correctamente."

@@ -3,4 +3,5 @@ id,nombre
 2,En proceso
 3,Resuelto
 4,Escalado
-5,Cancelado
+5,En espera
+6,Cancelado
