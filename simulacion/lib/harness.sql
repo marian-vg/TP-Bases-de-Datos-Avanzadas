@@ -178,10 +178,40 @@ CREATE OR REPLACE FUNCTION pg_temp.sim_trigger_existe(
     );
 $$ LANGUAGE sql STABLE;
 
+CREATE OR REPLACE FUNCTION pg_temp.sim_regclass(
+    p_nombre TEXT
+) RETURNS REGCLASS AS $$
+DECLARE
+    v_relacion REGCLASS;
+BEGIN
+    IF p_nombre IS NULL OR btrim(p_nombre) = '' THEN
+        RETURN NULL;
+    END IF;
+
+    BEGIN
+        v_relacion := to_regclass(p_nombre);
+    EXCEPTION WHEN OTHERS THEN
+        v_relacion := NULL;
+    END;
+
+    IF v_relacion IS NOT NULL THEN
+        RETURN v_relacion;
+    END IF;
+
+    BEGIN
+        v_relacion := to_regclass(lower(p_nombre));
+    EXCEPTION WHEN OTHERS THEN
+        v_relacion := NULL;
+    END;
+
+    RETURN v_relacion;
+END;
+$$ LANGUAGE plpgsql STABLE;
+
 CREATE OR REPLACE FUNCTION pg_temp.sim_relacion_existe(
     p_nombre TEXT
 ) RETURNS BOOLEAN AS $$
-    SELECT to_regclass(p_nombre) IS NOT NULL;
+    SELECT pg_temp.sim_regclass(p_nombre) IS NOT NULL;
 $$ LANGUAGE sql STABLE;
 
 CREATE OR REPLACE FUNCTION pg_temp.sim_id_catalogo(
@@ -191,11 +221,31 @@ CREATE OR REPLACE FUNCTION pg_temp.sim_id_catalogo(
 ) RETURNS INT AS $$
 DECLARE
     v_id INT;
+    v_relacion REGCLASS;
 BEGIN
-    EXECUTE format('SELECT %I FROM %I WHERE nombre = $1', p_columna_id, p_tabla)
+    v_relacion := pg_temp.sim_regclass(p_tabla);
+    IF v_relacion IS NULL THEN
+        RETURN NULL;
+    END IF;
+
+    IF NOT EXISTS (
+        SELECT 1
+        FROM pg_attribute
+        WHERE attrelid = v_relacion
+          AND attname IN (p_columna_id, 'nombre')
+          AND NOT attisdropped
+        GROUP BY attrelid
+        HAVING count(DISTINCT attname) = 2
+    ) THEN
+        RETURN NULL;
+    END IF;
+
+    EXECUTE format('SELECT %I FROM %s WHERE nombre = $1', p_columna_id, v_relacion)
     INTO v_id
     USING p_nombre;
     RETURN v_id;
+EXCEPTION WHEN undefined_table OR undefined_column THEN
+    RETURN NULL;
 END;
 $$ LANGUAGE plpgsql STABLE;
 
