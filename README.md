@@ -190,15 +190,38 @@ La carpeta `simulacion/` contiene una suite de demostración transaccional para 
 > [!IMPORTANT]
 > Aunque la simulación modifica incidentes, recursos, asignaciones, penalizaciones, logs y parámetros durante la corrida, no deja datos de prueba persistidos. El runner abre una transacción, restaura secuencias y termina con `ROLLBACK`.
 
-### Opción A: usando Docker, sin instalar `psql` local
+### Ejecución completa en Linux con Docker
 
-Desde la raíz del repositorio:
+Desde la raíz del repositorio, levantá PostgreSQL y ejecutá toda la simulación:
+
+```bash
+docker compose up -d
+chmod +x simulacion/run_simulacion.sh
+./simulacion/run_simulacion.sh
+```
+
+El `chmod` solo es necesario la primera vez. El script espera que la base `smart_city`
+ya esté inicializada, crea `simulacion/logs/`, ejecuta todos los escenarios y muestra un
+resumen general en la terminal. Al terminar también imprime la ruta del archivo con el
+detalle completo.
+
+Para las siguientes verificaciones alcanza con:
 
 ```bash
 ./simulacion/run_simulacion.sh
 ```
 
-Ese script crea `simulacion/logs/` si no existe, ejecuta la simulación resumida y al final imprime la ruta del log detallado.
+> [!TIP]
+> Si la base quedó desactualizada después de modificar tablas, triggers o datos iniciales,
+> recreala antes de ejecutar la simulación:
+>
+> ```bash
+> docker compose down -v
+> docker compose up -d
+> ./simulacion/run_simulacion.sh
+> ```
+
+### Comando Docker manual
 
 Si preferís ejecutar el comando manualmente:
 
