@@ -363,9 +363,7 @@ BEGIN
     SET fk_recurso_id = EXCLUDED.fk_recurso_id,
         fk_tipo_penalizacion_id = EXCLUDED.fk_tipo_penalizacion_id,
         puntaje = EXCLUDED.puntaje,
-        motivo = EXCLUDED.motivo,
-        fecha = CURRENT_DATE,
-        hora = CURRENT_TIME;
+        motivo = EXCLUDED.motivo;
 
     PERFORM fn_registrar_decision('recurso', v_recurso_id, 'P4',
         'Penalización por demora recalculada para asignación #'||p_id_asignacion||': ' ||

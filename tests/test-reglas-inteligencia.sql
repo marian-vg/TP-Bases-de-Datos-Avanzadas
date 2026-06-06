@@ -337,6 +337,7 @@ DECLARE
     v_i INT;
     v_fuera INT;
     v_disponible INT;
+    v_vigentes INT;
 BEGIN
     SELECT id_estado_recurso INTO v_disponible FROM EstadoRecurso WHERE nombre = 'Disponible';
     SELECT id_estado_recurso INTO v_fuera FROM EstadoRecurso WHERE nombre = 'Fuera de servicio';
@@ -349,9 +350,7 @@ BEGIN
     DELETE FROM Penalizacion WHERE fk_recurso_id IN (v_rec, v_otro);
     DELETE FROM InhabilitacionRecurso WHERE fk_recurso_id IN (v_rec, v_otro);
     UPDATE Recurso
-    SET fk_estado_recurso_id = v_disponible,
-        cantidad_penalizaciones = 0,
-        ciclo_penalizaciones = 1
+    SET fk_estado_recurso_id = v_disponible
     WHERE id_recurso IN (v_rec, v_otro);
 
     FOR v_i IN 1..v_umbral LOOP
@@ -363,7 +362,6 @@ BEGIN
         SELECT 1 FROM Recurso
         WHERE id_recurso = v_rec
           AND fk_estado_recurso_id = v_fuera
-          AND cantidad_penalizaciones = v_umbral
     ) OR NOT EXISTS (
         SELECT 1 FROM InhabilitacionRecurso
         WHERE fk_recurso_id = v_rec
@@ -380,17 +378,24 @@ BEGIN
 
     CALL sp_ReactivarRecursos();
 
+    SELECT COUNT(*) INTO v_vigentes
+    FROM Penalizacion p
+    WHERE p.fk_recurso_id = v_rec
+      AND (p.fecha + p.hora) > (
+          SELECT MAX(fecha_reactivado)
+          FROM InhabilitacionRecurso
+          WHERE fk_recurso_id = v_rec
+      );
+
     IF NOT EXISTS (
         SELECT 1 FROM Recurso
         WHERE id_recurso = v_rec
           AND fk_estado_recurso_id = v_disponible
-          AND cantidad_penalizaciones = 0
-          AND ciclo_penalizaciones = 2
     ) OR NOT EXISTS (
         SELECT 1 FROM InhabilitacionRecurso
         WHERE fk_recurso_id = v_rec
           AND fecha_reactivado IS NOT NULL
-    ) THEN
+    ) OR v_vigentes <> 0 THEN
         RAISE EXCEPTION 'FALLO R17: no se completó correctamente la reactivación.';
     END IF;
 

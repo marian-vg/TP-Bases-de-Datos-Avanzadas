@@ -35,8 +35,7 @@ SELECT nombre_parametro, numero
 FROM ParametrosSistema;
 
 CREATE TEMP TABLE sim_recursos_base ON COMMIT DROP AS
-SELECT id_recurso, fk_estado_recurso_id, puntaje,
-       cantidad_penalizaciones, ciclo_penalizaciones
+SELECT id_recurso, fk_estado_recurso_id, puntaje
 FROM Recurso;
 
 CREATE TEMP TABLE sim_zona_recurso_base ON COMMIT DROP AS
@@ -279,18 +278,6 @@ BEGIN
       AND (
           r.fk_estado_recurso_id IS DISTINCT FROM b.fk_estado_recurso_id
           OR r.puntaje IS DISTINCT FROM b.puntaje
-      );
-
-    -- Restaurar al final los derivados de penalizaciones: una salida temporal de
-    -- "Fuera de servicio" puede haber iniciado un ciclo nuevo mediante trigger.
-    UPDATE Recurso r
-    SET cantidad_penalizaciones = b.cantidad_penalizaciones,
-        ciclo_penalizaciones = b.ciclo_penalizaciones
-    FROM sim_recursos_base b
-    WHERE r.id_recurso = b.id_recurso
-      AND (
-          r.cantidad_penalizaciones IS DISTINCT FROM b.cantidad_penalizaciones
-          OR r.ciclo_penalizaciones IS DISTINCT FROM b.ciclo_penalizaciones
       );
 
     DELETE FROM ZonaRecurso zr

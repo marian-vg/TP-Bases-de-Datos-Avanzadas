@@ -128,12 +128,6 @@ CREATE TABLE Recurso (
     -- cumplimiento de SLA; baja con penalizaciones. El motor de asignación elige el de mayor puntaje.
     -- Arranca en 0 (el dataset base no trae historial operativo). Puede ser negativo.
     puntaje INT NOT NULL DEFAULT 0,
-    -- Contador de sanciones vigentes desde la última reactivación. El historial completo
-    -- permanece en Penalizacion; este valor derivado permite aplicar el bloqueo operativo.
-    cantidad_penalizaciones INT NOT NULL DEFAULT 0 CHECK (cantidad_penalizaciones >= 0),
-    -- Se incrementa cada vez que el recurso sale de una inhabilitación. Las penalizaciones
-    -- quedan asociadas al ciclo en que ocurrieron para no mezclar sanciones históricas.
-    ciclo_penalizaciones INT NOT NULL DEFAULT 1 CHECK (ciclo_penalizaciones > 0),
     CONSTRAINT fk_recurso_tipo FOREIGN KEY (fk_tipo_recurso_id)
         REFERENCES TipoRecurso(id_tipo_recurso) ON DELETE RESTRICT,
     CONSTRAINT fk_recurso_zona_base FOREIGN KEY (fk_zona_base_id) 
@@ -262,10 +256,11 @@ CREATE TABLE Penalizacion (
     fk_recurso_id INT NOT NULL,
     fk_tipo_penalizacion_id INT NOT NULL,
     fk_asignacion_id INT NULL, -- Solo para P4: permite recalcular la penalización por demora sin duplicar puntos si cambia timestamp_llegada.
-    fecha DATE NOT NULL DEFAULT CURRENT_DATE,
-    hora TIME NOT NULL DEFAULT CURRENT_TIME,
+    -- clock_timestamp() refleja el instante real incluso dentro de una simulación
+    -- transaccional larga; permite separar penalizaciones anteriores y posteriores a R17.
+    fecha DATE NOT NULL DEFAULT (clock_timestamp()::DATE),
+    hora TIME NOT NULL DEFAULT (clock_timestamp()::TIME),
     puntaje INT NULL, -- Puntos reales de esta penalización; NULL usa TipoPenalizacion.puntaje vía COALESCE (R4/R9 conservan el default, P4 calcula proporcional).
-    ciclo_penalizaciones INT NOT NULL, -- Ciclo vigente del recurso al generarse; permite conservar historial sin contar sanciones ya rehabilitadas.
     motivo TEXT NOT NULL,
     CONSTRAINT fk_penalizacion_recurso FOREIGN KEY (fk_recurso_id) 
         REFERENCES Recurso(id_recurso) ON DELETE CASCADE,

@@ -138,8 +138,19 @@ SELECT
     COUNT(p.id_penalizacion) AS cantidad_infracciones,
     SUM(COALESCE(p.puntaje, tp.puntaje)) AS puntos_acumulados,
     MAX(p.fecha) AS ultima_penalizacion,
-    r.cantidad_penalizaciones AS penalizaciones_vigentes,
-    r.ciclo_penalizaciones,
+    (
+        SELECT COUNT(*)
+        FROM Penalizacion pv
+        WHERE pv.fk_recurso_id = r.id_recurso
+          AND (pv.fecha + pv.hora) > COALESCE(
+              (
+                  SELECT MAX(ir2.fecha_reactivado)
+                  FROM InhabilitacionRecurso ir2
+                  WHERE ir2.fk_recurso_id = r.id_recurso
+              ),
+              TIMESTAMP '-infinity'
+          )
+    ) AS penalizaciones_vigentes,
     ir.fecha_inhabilitacion,
     ir.fecha_reactivacion_programada
 FROM Recurso r
@@ -151,7 +162,6 @@ LEFT JOIN InhabilitacionRecurso ir
   ON ir.fk_recurso_id = r.id_recurso
  AND ir.fecha_reactivado IS NULL
 GROUP BY r.id_recurso, tr.nombre, er.nombre,
-         r.cantidad_penalizaciones, r.ciclo_penalizaciones,
          ir.fecha_inhabilitacion, ir.fecha_reactivacion_programada
 ORDER BY puntos_acumulados DESC;
 

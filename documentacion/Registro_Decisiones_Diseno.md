@@ -344,6 +344,6 @@ La relación entre `Recurso` e `InhabilitacionRecurso` es 1:N para conservar el 
 históricas. R17 consulta esta tabla y reactiva únicamente bloqueos originados por
 penalizaciones; otras causas de `Fuera de servicio` no se modifican automáticamente.
 
-Las penalizaciones se agrupan por ciclos. Al reactivar un recurso, el contador vigente vuelve
-a cero y comienza un ciclo nuevo, mientras que las penalizaciones e inhabilitaciones previas
-permanecen disponibles para auditoría.
+Las penalizaciones vigentes se calculan desde la última `fecha_reactivado`. De esta manera no
+se almacenan contadores ni ciclos derivados: las tablas `Penalizacion` e
+`InhabilitacionRecurso` permanecen como fuentes de verdad y conservan todo el historial.

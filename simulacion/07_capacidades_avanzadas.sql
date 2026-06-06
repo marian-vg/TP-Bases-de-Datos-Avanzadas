@@ -69,6 +69,7 @@ DECLARE
     v_estado_ajeno TEXT;
     v_umbral INT;
     v_cantidad INT;
+    v_penalizaciones_vigentes INT;
     v_historial INT;
 BEGIN
     SELECT numero::INT INTO v_umbral
@@ -80,13 +81,17 @@ BEGIN
         VALUES (v_recurso, v_tipo_penalizacion, 'SIM-07 penalización previa al umbral');
     END LOOP;
 
+    SELECT COUNT(*) INTO v_penalizaciones_vigentes
+    FROM Penalizacion
+    WHERE fk_recurso_id = v_recurso;
+
     PERFORM pg_temp.sim_afirmar('07-AVANZADAS', 'Bloqueo antes del umbral',
         EXISTS (
             SELECT 1 FROM Recurso
             WHERE id_recurso = v_recurso
               AND fk_estado_recurso_id = v_disponible
-              AND cantidad_penalizaciones = v_umbral - 1
-        ),
+        )
+        AND v_penalizaciones_vigentes = v_umbral - 1,
         'El recurso permanecio disponible antes de alcanzar el maximo.',
         'El recurso fue bloqueado antes de alcanzar el maximo configurado.');
 
@@ -130,20 +135,24 @@ BEGIN
     JOIN EstadoRecurso er ON er.id_estado_recurso = r.fk_estado_recurso_id
     WHERE r.id_recurso = v_recurso_ajeno;
 
+    SELECT COUNT(*) INTO v_penalizaciones_vigentes
+    FROM Penalizacion p
+    WHERE p.fk_recurso_id = v_recurso
+      AND (p.fecha + p.hora) > (
+          SELECT MAX(fecha_reactivado)
+          FROM InhabilitacionRecurso
+          WHERE fk_recurso_id = v_recurso
+      );
+
     PERFORM pg_temp.sim_afirmar('07-AVANZADAS', 'R17 reactivacion temporal',
         v_estado = 'Disponible'
-        AND EXISTS (
-            SELECT 1 FROM Recurso
-            WHERE id_recurso = v_recurso
-              AND cantidad_penalizaciones = 0
-              AND ciclo_penalizaciones = 2
-        )
+        AND v_penalizaciones_vigentes = 0
         AND EXISTS (
             SELECT 1 FROM InhabilitacionRecurso
             WHERE fk_recurso_id = v_recurso
               AND fecha_reactivado IS NOT NULL
         ),
-        'R17 reactivo el recurso, reinicio sus penalizaciones y conservo el historial.',
+        'R17 reactivo el recurso, inicio un nuevo periodo y conservo el historial.',
         format('La reactivacion no completo el ciclo esperado; estado final %s.', v_estado));
 
     PERFORM pg_temp.sim_afirmar('07-AVANZADAS', 'R17 ignora otras bajas',
