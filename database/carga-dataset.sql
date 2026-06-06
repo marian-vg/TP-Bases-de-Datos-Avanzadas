@@ -22,6 +22,7 @@
 -- TRUNCATE TABLE 
 --     Asignacion, 
 --     Penalizacion, 
+--     InhabilitacionRecurso,
 --     Log, 
 --     ZonaRecurso, 
 --     Recurso, 

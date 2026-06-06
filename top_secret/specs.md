@@ -194,7 +194,7 @@ El juego se apoya en estas tablas existentes. **No se crean tablas nuevas.**
 | Zonas habilitadas de un recurso | `ZonaRecurso` | Para R10 (validación de zona). |
 | Asignación | `Asignacion` | Timestamps = ciclo de atención (ver §11). |
 | Penalización | `Penalizacion`, `TipoPenalizacion` | `puntaje` acumula → bloqueo de recurso. |
-| Recurso fuera de servicio | `RecursoFuera` | Para R17 (reactivación). |
+| Recurso inhabilitado | `InhabilitacionRecurso` | Historial de bloqueos temporales por penalizaciones y fecha de reactivación R17. |
 | Auditoría | `Log` | `tablaAfectada` + `idTablaAfectada` (diseño escalable del equipo). |
 | Parámetros de negocio | `ParametrosSistema` | Umbrales que **sí** son regla (ver abajo). |
 | Reportes | Vistas del TP | `vIncidentesActivos`, `vRecursosCandidatos`, etc. |
@@ -209,8 +209,8 @@ El juego se apoya en estas tablas existentes. **No se crean tablas nuevas.**
 | Disponible | `Disponible` (1) | Sin asignación activa |
 | En tránsito | `En tránsito` (5) | Asignación con `timestamp_llegada IS NULL` |
 | Atendiendo | `Ocupado` (2) | `timestamp_llegada` seteado, sin `timestamp_finalizacion` |
-| En mantenimiento | `En mantenimiento` (4) | `RecursoFuera` vigente (vuelve por R17) |
-| Penalizado / bloqueado | `Fuera de servicio` (3) | Derivado: puntaje de `Penalizacion` sobre umbral de bloqueo |
+| En mantenimiento | `En mantenimiento` (4) | Baja operativa independiente; R17 no la modifica. |
+| Penalizado / bloqueado | `Fuera de servicio` (3) | Cantidad de penalizaciones vigentes sobre el máximo configurado |
 
 > Nota: "Ocupado" (2) y "En tránsito" (5) **sí** son estados reales de la BD; "atendiendo" y
 > "penalizado" son etiquetas visuales que el frontend resuelve. El cambio de estado lo hace la

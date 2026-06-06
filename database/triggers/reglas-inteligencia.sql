@@ -16,14 +16,46 @@
 
 
 -- =============================================================================================================
--- 1. fn_puntaje_por_penalizacion / trg_puntaje_por_penalizacion — R14 (resta)
+-- 1. Gestión de penalizaciones — R14 (ranking) + bloqueo por acumulación
 -- =============================================================================================================
 
-CREATE OR REPLACE FUNCTION fn_puntaje_por_penalizacion()
+-- Asocia cada penalización nueva al ciclo vigente del recurso. El valor no queda
+-- librado al llamador porque es un dato derivado de control.
+CREATE OR REPLACE FUNCTION fn_asignar_ciclo_penalizacion()
+RETURNS TRIGGER AS $$
+BEGIN
+    IF TG_OP = 'INSERT' OR NEW.fk_recurso_id IS DISTINCT FROM OLD.fk_recurso_id THEN
+        SELECT ciclo_penalizaciones
+        INTO NEW.ciclo_penalizaciones
+        FROM Recurso
+        WHERE id_recurso = NEW.fk_recurso_id
+        FOR UPDATE;
+    ELSE
+        NEW.ciclo_penalizaciones := OLD.ciclo_penalizaciones;
+    END IF;
+
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS trg_asignar_ciclo_penalizacion ON Penalizacion;
+CREATE TRIGGER trg_asignar_ciclo_penalizacion
+BEFORE INSERT OR UPDATE ON Penalizacion
+FOR EACH ROW
+EXECUTE FUNCTION fn_asignar_ciclo_penalizacion();
+
+
+CREATE OR REPLACE FUNCTION fn_gestion_penalizaciones()
 RETURNS TRIGGER AS $$
 DECLARE
     v_resta_old INT := 0;
     v_resta_new INT := 0;
+    v_recurso_id INT;
+    v_cantidad INT;
+    v_ciclo INT;
+    v_umbral INT;
+    v_estado_fuera INT;
+    v_minutos NUMERIC;
 BEGIN
     -- La penalización puede recalcularse (P4) o eliminarse si timestamp_llegada cambia.
     -- Por eso el puntaje se mantiene por delta: devolver lo anterior y aplicar lo nuevo.
@@ -34,7 +66,12 @@ BEGIN
         WHERE tp.id_tipo_penalizacion = OLD.fk_tipo_penalizacion_id;
 
         UPDATE Recurso
-        SET puntaje = puntaje + COALESCE(v_resta_old, 0)
+        SET puntaje = puntaje + COALESCE(v_resta_old, 0),
+            cantidad_penalizaciones = CASE
+                WHEN ciclo_penalizaciones = OLD.ciclo_penalizaciones
+                    THEN GREATEST(cantidad_penalizaciones - 1, 0)
+                ELSE cantidad_penalizaciones
+            END
         WHERE id_recurso = OLD.fk_recurso_id;
     END IF;
 
@@ -45,8 +82,77 @@ BEGIN
         WHERE tp.id_tipo_penalizacion = NEW.fk_tipo_penalizacion_id;
 
         UPDATE Recurso
-        SET puntaje = puntaje - COALESCE(v_resta_new, 0)
-        WHERE id_recurso = NEW.fk_recurso_id;
+        SET puntaje = puntaje - COALESCE(v_resta_new, 0),
+            cantidad_penalizaciones = CASE
+                WHEN ciclo_penalizaciones = NEW.ciclo_penalizaciones
+                    THEN cantidad_penalizaciones + 1
+                ELSE cantidad_penalizaciones
+            END
+        WHERE id_recurso = NEW.fk_recurso_id
+        RETURNING id_recurso, cantidad_penalizaciones, ciclo_penalizaciones
+        INTO v_recurso_id, v_cantidad, v_ciclo;
+
+        -- Un UPDATE de P4 sobre la misma penalización devuelve y vuelve a aplicar su
+        -- contribución, por lo que el contador permanece estable.
+        SELECT COALESCE(
+            (SELECT numero::INT
+             FROM ParametrosSistema
+             WHERE nombre_parametro = 'MAX_CANTIDAD_PENALIZACIONES_RECURSO'),
+            3
+        ) INTO v_umbral;
+
+        IF v_cantidad >= v_umbral
+           AND NOT EXISTS (
+               SELECT 1
+               FROM InhabilitacionRecurso
+               WHERE fk_recurso_id = v_recurso_id
+                 AND fecha_reactivado IS NULL
+           ) THEN
+            SELECT id_estado_recurso
+            INTO v_estado_fuera
+            FROM EstadoRecurso
+            WHERE nombre = 'Fuera de servicio';
+
+            SELECT COALESCE(
+                (SELECT numero
+                 FROM ParametrosSistema
+                 WHERE nombre_parametro = 'MINUTOS_REACTIVACION_RECURSO'),
+                60
+            ) INTO v_minutos;
+
+            INSERT INTO InhabilitacionRecurso (
+                fk_recurso_id,
+                fecha_reactivacion_programada,
+                cantidad_penalizaciones,
+                motivo
+            )
+            VALUES (
+                v_recurso_id,
+                CURRENT_TIMESTAMP + (v_minutos * INTERVAL '1 minute'),
+                v_cantidad,
+                format(
+                    'Bloqueo automático al alcanzar %s penalizaciones vigentes (umbral: %s, ciclo: %s).',
+                    v_cantidad, v_umbral, v_ciclo
+                )
+            );
+
+            UPDATE Recurso
+            SET fk_estado_recurso_id = v_estado_fuera
+            WHERE id_recurso = v_recurso_id;
+
+            INSERT INTO Log (
+                tablaAfectada, idTablaAfectada, operacion, trigger_disparador, detalle
+            )
+            VALUES (
+                'recurso', v_recurso_id, 'DECISION', 'trg_gestion_penalizaciones',
+                jsonb_build_object(
+                    'regla', 'Bloqueo por múltiples penalizaciones',
+                    'cantidad_penalizaciones', v_cantidad,
+                    'umbral', v_umbral,
+                    'ciclo_penalizaciones', v_ciclo
+                )
+            );
+        END IF;
 
         RETURN NEW;
     END IF;
@@ -56,10 +162,52 @@ END;
 $$ LANGUAGE plpgsql;
 
 DROP TRIGGER IF EXISTS trg_puntaje_por_penalizacion ON Penalizacion;
-CREATE TRIGGER trg_puntaje_por_penalizacion
+DROP TRIGGER IF EXISTS trg_gestion_penalizaciones ON Penalizacion;
+CREATE TRIGGER trg_gestion_penalizaciones
 AFTER INSERT OR UPDATE OR DELETE ON Penalizacion
 FOR EACH ROW
-EXECUTE FUNCTION fn_puntaje_por_penalizacion();
+EXECUTE FUNCTION fn_gestion_penalizaciones();
+
+
+-- Cierra una inhabilitación cuando el recurso abandona "Fuera de servicio",
+-- ya sea por R17 o por una rehabilitación administrativa anticipada.
+CREATE OR REPLACE FUNCTION fn_cerrar_inhabilitacion_recurso()
+RETURNS TRIGGER AS $$
+DECLARE
+    v_estado_anterior TEXT;
+    v_estado_nuevo TEXT;
+BEGIN
+    SELECT nombre INTO v_estado_anterior
+    FROM EstadoRecurso
+    WHERE id_estado_recurso = OLD.fk_estado_recurso_id;
+
+    SELECT nombre INTO v_estado_nuevo
+    FROM EstadoRecurso
+    WHERE id_estado_recurso = NEW.fk_estado_recurso_id;
+
+    IF v_estado_anterior = 'Fuera de servicio'
+       AND v_estado_nuevo <> 'Fuera de servicio' THEN
+        UPDATE InhabilitacionRecurso
+        SET fecha_reactivado = COALESCE(fecha_reactivado, CURRENT_TIMESTAMP)
+        WHERE fk_recurso_id = NEW.id_recurso
+          AND fecha_reactivado IS NULL;
+
+        UPDATE Recurso
+        SET cantidad_penalizaciones = 0,
+            ciclo_penalizaciones = ciclo_penalizaciones + 1
+        WHERE id_recurso = NEW.id_recurso;
+    END IF;
+
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS trg_cerrar_inhabilitacion_recurso ON Recurso;
+CREATE TRIGGER trg_cerrar_inhabilitacion_recurso
+AFTER UPDATE OF fk_estado_recurso_id ON Recurso
+FOR EACH ROW
+WHEN (OLD.fk_estado_recurso_id IS DISTINCT FROM NEW.fk_estado_recurso_id)
+EXECUTE FUNCTION fn_cerrar_inhabilitacion_recurso();
 
 
 -- =============================================================================================================

@@ -323,6 +323,88 @@ BEGIN
 END;
 $$;
 
+-- ============================================================================
+-- BLOQUEO POR CANTIDAD DE PENALIZACIONES + R17
+-- ============================================================================
+\echo '>>> PRUEBA 5B: bloqueo temporal e historial de inhabilitaciones'
+
+DO $$
+DECLARE
+    v_rec INT;
+    v_otro INT;
+    v_tipo INT;
+    v_umbral INT;
+    v_i INT;
+    v_fuera INT;
+    v_disponible INT;
+BEGIN
+    SELECT id_estado_recurso INTO v_disponible FROM EstadoRecurso WHERE nombre = 'Disponible';
+    SELECT id_estado_recurso INTO v_fuera FROM EstadoRecurso WHERE nombre = 'Fuera de servicio';
+    SELECT numero::INT INTO v_umbral FROM ParametrosSistema
+    WHERE nombre_parametro = 'MAX_CANTIDAD_PENALIZACIONES_RECURSO';
+    SELECT id_tipo_penalizacion INTO v_tipo FROM TipoPenalizacion ORDER BY id_tipo_penalizacion LIMIT 1;
+    SELECT id_recurso INTO v_rec FROM Recurso ORDER BY id_recurso LIMIT 1;
+    SELECT id_recurso INTO v_otro FROM Recurso ORDER BY id_recurso OFFSET 1 LIMIT 1;
+
+    DELETE FROM Penalizacion WHERE fk_recurso_id IN (v_rec, v_otro);
+    DELETE FROM InhabilitacionRecurso WHERE fk_recurso_id IN (v_rec, v_otro);
+    UPDATE Recurso
+    SET fk_estado_recurso_id = v_disponible,
+        cantidad_penalizaciones = 0,
+        ciclo_penalizaciones = 1
+    WHERE id_recurso IN (v_rec, v_otro);
+
+    FOR v_i IN 1..v_umbral LOOP
+        INSERT INTO Penalizacion (fk_recurso_id, fk_tipo_penalizacion_id, motivo)
+        VALUES (v_rec, v_tipo, 'Prueba de bloqueo por cantidad');
+    END LOOP;
+
+    IF NOT EXISTS (
+        SELECT 1 FROM Recurso
+        WHERE id_recurso = v_rec
+          AND fk_estado_recurso_id = v_fuera
+          AND cantidad_penalizaciones = v_umbral
+    ) OR NOT EXISTS (
+        SELECT 1 FROM InhabilitacionRecurso
+        WHERE fk_recurso_id = v_rec
+          AND fecha_reactivado IS NULL
+    ) THEN
+        RAISE EXCEPTION 'FALLO bloqueo: el recurso no quedó correctamente inhabilitado.';
+    END IF;
+
+    UPDATE Recurso SET fk_estado_recurso_id = v_fuera WHERE id_recurso = v_otro;
+    UPDATE InhabilitacionRecurso
+    SET fecha_inhabilitacion = CURRENT_TIMESTAMP - INTERVAL '2 minutes',
+        fecha_reactivacion_programada = CURRENT_TIMESTAMP - INTERVAL '1 minute'
+    WHERE fk_recurso_id = v_rec AND fecha_reactivado IS NULL;
+
+    CALL sp_ReactivarRecursos();
+
+    IF NOT EXISTS (
+        SELECT 1 FROM Recurso
+        WHERE id_recurso = v_rec
+          AND fk_estado_recurso_id = v_disponible
+          AND cantidad_penalizaciones = 0
+          AND ciclo_penalizaciones = 2
+    ) OR NOT EXISTS (
+        SELECT 1 FROM InhabilitacionRecurso
+        WHERE fk_recurso_id = v_rec
+          AND fecha_reactivado IS NOT NULL
+    ) THEN
+        RAISE EXCEPTION 'FALLO R17: no se completó correctamente la reactivación.';
+    END IF;
+
+    IF NOT EXISTS (
+        SELECT 1 FROM Recurso
+        WHERE id_recurso = v_otro AND fk_estado_recurso_id = v_fuera
+    ) THEN
+        RAISE EXCEPTION 'FALLO R17: se reactivó un recurso ajeno al bloqueo por penalizaciones.';
+    END IF;
+
+    RAISE NOTICE 'ÉXITO: bloqueo, historial y reactivación R17 verificados.';
+END;
+$$;
+
 
 -- ============================================================================
 -- R12 — PRIORIZACIÓN AUTOMÁTICA POR GRAVEDAD (PENDIENTE en módulos)

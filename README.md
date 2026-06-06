@@ -4,6 +4,10 @@ Repositorio del **Trabajo Práctico de Bases de Datos Avanzadas** sobre una **ba
 
 El proyecto modela incidentes, sensores, recursos, asignaciones, penalizaciones, auditoría y reglas activas mediante triggers, procedimientos almacenados, vistas y dataset reproducible.
 
+Los recursos que alcanzan `MAX_CANTIDAD_PENALIZACIONES_RECURSO` quedan temporalmente
+`Fuera de servicio`. Cada bloqueo se conserva en `InhabilitacionRecurso`, y R17 reactiva
+exclusivamente las inhabilitaciones cuya fecha programada ya venció.
+
 > [!NOTE]
 > La base final se llama `smart_city`. El flujo recomendado para el equipo es Docker, porque garantiza la misma versión de PostgreSQL y la misma carga inicial para todos.
 

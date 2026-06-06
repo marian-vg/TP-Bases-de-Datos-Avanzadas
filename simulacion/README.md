@@ -72,7 +72,7 @@ antes del rollback.
 | `04_validaciones.sql` | Disponibilidad, tipo, zona, estados y duplicados |
 | `05_sensores_iot.sql` | Confianza, promocion, rechazo, ambiguedad y duplicados IoT |
 | `06_saturacion_rebalanceo.sql` | Agotamiento local, recurso externo, ciclo completo y capacidad por zona |
-| `07_capacidades_avanzadas.sql` | SLA, escalamiento, reactivacion, arribo, penalizacion proporcional, P1, P3, P5 y R6 |
+| `07_capacidades_avanzadas.sql` | SLA, escalamiento, bloqueo/reactivacion de recursos, arribo, penalizacion proporcional, P1, P3, P5 y R6 |
 | `08_simulacion_20_incidentes.sql` | Rafaga deterministica de veinte incidentes |
 | `09_reporte_operativo.sql` | Veredicto, cobertura, SLA, ranking, auditoria y observaciones |
 
@@ -99,7 +99,10 @@ Los hallazgos principales fueron estos:
 - P3 se valida cerrando un incidente real, finalizando asignaciones y liberando recursos.
 - P5 se valida simulando un evento de sensor confiable que genera un incidente automatico.
 - R6 se valida con el mapeo `TipoEventoTipoIncidente`: el incidente generado queda relacionado al evento que lo origino.
-- El bloqueo por acumulacion de penalizaciones no esta implementado en los modulos cargados.
+- El bloqueo por acumulacion de penalizaciones inhabilita temporalmente al recurso al
+  alcanzar `MAX_CANTIDAD_PENALIZACIONES_RECURSO`.
+- R17 reactiva solo recursos con una `InhabilitacionRecurso` vencida; otras bajas
+  operativas permanecen fuera de servicio.
 - R18 registra varias decisiones centrales, pero no cada accion de todas las reglas activas.
 - R19 ofrece historial de auditoria y decisiones, pero no registra cada ejecucion de trigger.
 - R20 usa `Pendiente` como espera operativa porque el catalogo no contiene `En espera`.
@@ -111,7 +114,7 @@ La matriz final se calcula contra los objetos realmente instalados y la evidenci
 corrida. La suite demuestra el mecanismo funcional de R6, R16, R17, R20, P1, P2, P3, P4 y P5.
 Tambien distingue decisiones de alcance documentadas para:
 
-- Bloqueo automatico por penalizaciones acumuladas.
+- Bloqueo y reactivacion automatica por penalizaciones acumuladas.
 - R18/R19: cobertura parcial de decisiones y ejecuciones.
 - R20: capacidad implementada usando `Pendiente` como espera operativa por decision de diseno.
 - R16/R17: procedimientos disponibles sin planificador integrado.

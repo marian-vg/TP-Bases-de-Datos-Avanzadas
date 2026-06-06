@@ -265,7 +265,7 @@ for recurso_id_x, _, zona_base, _ in recursos:
 parametros = [
     ("MAX_RECURSOS_POR_INCIDENTE",           "5"),
     ("MIN_RECURSOS_INCIDENTE_CRITICO",       "2"),    # R5: asignación múltiple
-    ("PUNTAJE_BLOQUEO_RECURSO",              "75"),   # bloquear recurso si suma X puntos
+    ("MAX_CANTIDAD_PENALIZACIONES_RECURSO",  "3"),    # bloquear al alcanzar X penalizaciones vigentes
     ("MINUTOS_REACTIVACION_RECURSO",         "60"),   # R17: reactivación automática
     ("MINUTOS_DUPLICADO_INCIDENTE",          "10"),   # R11: ventana de duplicación
     ("GRAVEDAD_MINIMA_CRITICA",              "4"),    # de qué nivel se considera crítico

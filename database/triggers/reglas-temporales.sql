@@ -35,10 +35,9 @@ $$;
 
 -- ============================================================================
 -- R17. sp_ReactivarRecursos
--- Reactivación automática: Un recurso "Fuera de servicio" vuelve a "Disponible"
--- tras superar los minutos definidos en MINUTOS_REACTIVACION_RECURSO.
--- Se ancla a la ÚLTIMA salida registrada en el Log (MAX timestamp) para evitar
--- que una salida vieja de un ciclo anterior dispare la reactivación de inmediato.
+-- Reactivación automática: solo los recursos temporalmente inhabilitados por
+-- acumulación de penalizaciones vuelven a "Disponible" al llegar su fecha programada.
+-- Otros recursos "Fuera de servicio" quedan fuera del alcance de R17.
 -- ============================================================================
 CREATE OR REPLACE PROCEDURE sp_ReactivarRecursos()
 LANGUAGE plpgsql
@@ -46,26 +45,19 @@ AS $$
 DECLARE
     v_estado_fuera INT;
     v_estado_disponible INT;
-    v_minutos NUMERIC;
 BEGIN
     SELECT id_estado_recurso INTO v_estado_fuera FROM EstadoRecurso WHERE nombre = 'Fuera de servicio';
     SELECT id_estado_recurso INTO v_estado_disponible FROM EstadoRecurso WHERE nombre = 'Disponible';
 
-    SELECT COALESCE(
-        (SELECT numero FROM ParametrosSistema WHERE nombre_parametro = 'MINUTOS_REACTIVACION_RECURSO'),
-        60
-    ) INTO v_minutos;
-
     UPDATE Recurso r
     SET fk_estado_recurso_id = v_estado_disponible
-    WHERE fk_estado_recurso_id = v_estado_fuera
-      AND (
-          SELECT MAX(l.timestamp)
-          FROM Log l
-          WHERE l.tablaAfectada = 'recurso'
-            AND l.idTablaAfectada = r.id_recurso
-            AND l.operacion = 'UPDATE'
-            AND (l.detalle->'despues'->>'fk_estado_recurso_id')::int = v_estado_fuera
-      ) <= CURRENT_TIMESTAMP - (v_minutos * INTERVAL '1 minute');
+    WHERE r.fk_estado_recurso_id = v_estado_fuera
+      AND EXISTS (
+          SELECT 1
+          FROM InhabilitacionRecurso ir
+          WHERE ir.fk_recurso_id = r.id_recurso
+            AND ir.fecha_reactivado IS NULL
+            AND ir.fecha_reactivacion_programada <= CURRENT_TIMESTAMP
+      );
 END;
 $$;

@@ -59,21 +59,64 @@ SELECT pg_temp.sim_reset_operativo();
 DO $$
 DECLARE
     v_recurso INT := (SELECT id_recurso FROM Recurso ORDER BY id_recurso LIMIT 1);
+    v_recurso_ajeno INT := (SELECT id_recurso FROM Recurso ORDER BY id_recurso OFFSET 1 LIMIT 1);
     v_fuera INT := pg_temp.sim_id_catalogo('EstadoRecurso', 'id_estado_recurso', 'Fuera de servicio');
+    v_disponible INT := pg_temp.sim_id_catalogo('EstadoRecurso', 'id_estado_recurso', 'Disponible');
+    v_tipo_penalizacion INT := (
+        SELECT id_tipo_penalizacion FROM TipoPenalizacion ORDER BY id_tipo_penalizacion LIMIT 1
+    );
     v_estado TEXT;
-    v_minutos NUMERIC;
+    v_estado_ajeno TEXT;
+    v_umbral INT;
+    v_cantidad INT;
+    v_historial INT;
 BEGIN
-    SELECT numero INTO v_minutos
+    SELECT numero::INT INTO v_umbral
     FROM ParametrosSistema
-    WHERE nombre_parametro = 'MINUTOS_REACTIVACION_RECURSO';
+    WHERE nombre_parametro = 'MAX_CANTIDAD_PENALIZACIONES_RECURSO';
 
-    UPDATE Recurso SET fk_estado_recurso_id = v_fuera WHERE id_recurso = v_recurso;
-    UPDATE Log
-    SET timestamp = CURRENT_TIMESTAMP - ((v_minutos + 1) * INTERVAL '1 minute')
-    WHERE lower(tablaAfectada) = 'recurso'
-      AND idTablaAfectada = v_recurso
-      AND operacion = 'UPDATE'
-      AND (detalle->'despues'->>'fk_estado_recurso_id')::int = v_fuera;
+    FOR v_cantidad IN 1..(v_umbral - 1) LOOP
+        INSERT INTO Penalizacion (fk_recurso_id, fk_tipo_penalizacion_id, motivo)
+        VALUES (v_recurso, v_tipo_penalizacion, 'SIM-07 penalización previa al umbral');
+    END LOOP;
+
+    PERFORM pg_temp.sim_afirmar('07-AVANZADAS', 'Bloqueo antes del umbral',
+        EXISTS (
+            SELECT 1 FROM Recurso
+            WHERE id_recurso = v_recurso
+              AND fk_estado_recurso_id = v_disponible
+              AND cantidad_penalizaciones = v_umbral - 1
+        ),
+        'El recurso permanecio disponible antes de alcanzar el maximo.',
+        'El recurso fue bloqueado antes de alcanzar el maximo configurado.');
+
+    INSERT INTO Penalizacion (fk_recurso_id, fk_tipo_penalizacion_id, motivo)
+    VALUES (v_recurso, v_tipo_penalizacion, 'SIM-07 penalización que alcanza el umbral');
+
+    SELECT er.nombre INTO v_estado
+    FROM Recurso r
+    JOIN EstadoRecurso er ON er.id_estado_recurso = r.fk_estado_recurso_id
+    WHERE r.id_recurso = v_recurso;
+
+    SELECT count(*) INTO v_historial
+    FROM InhabilitacionRecurso
+    WHERE fk_recurso_id = v_recurso
+      AND fecha_reactivado IS NULL;
+
+    PERFORM pg_temp.sim_afirmar('07-AVANZADAS', 'Bloqueo por penalizaciones',
+        v_estado = 'Fuera de servicio' AND v_historial = 1,
+        'Al alcanzar el maximo, el recurso fue inhabilitado y se registro el bloqueo.',
+        format('Resultado inesperado: estado %s, inhabilitaciones activas %s.',
+            v_estado, v_historial));
+
+    -- Un recurso fuera de servicio por otra causa no pertenece al alcance de R17.
+    UPDATE Recurso SET fk_estado_recurso_id = v_fuera WHERE id_recurso = v_recurso_ajeno;
+
+    UPDATE InhabilitacionRecurso
+    SET fecha_inhabilitacion = CURRENT_TIMESTAMP - INTERVAL '2 minutes',
+        fecha_reactivacion_programada = CURRENT_TIMESTAMP - INTERVAL '1 minute'
+    WHERE fk_recurso_id = v_recurso
+      AND fecha_reactivado IS NULL;
 
     CALL sp_ReactivarRecursos();
 
@@ -82,12 +125,33 @@ BEGIN
     JOIN EstadoRecurso er ON er.id_estado_recurso = r.fk_estado_recurso_id
     WHERE r.id_recurso = v_recurso;
 
+    SELECT er.nombre INTO v_estado_ajeno
+    FROM Recurso r
+    JOIN EstadoRecurso er ON er.id_estado_recurso = r.fk_estado_recurso_id
+    WHERE r.id_recurso = v_recurso_ajeno;
+
     PERFORM pg_temp.sim_afirmar('07-AVANZADAS', 'R17 reactivacion temporal',
-        v_estado = 'Disponible',
-        'El recurso fue reactivado luego del tiempo configurado.',
-        format('El recurso quedo en estado %s.', v_estado));
+        v_estado = 'Disponible'
+        AND EXISTS (
+            SELECT 1 FROM Recurso
+            WHERE id_recurso = v_recurso
+              AND cantidad_penalizaciones = 0
+              AND ciclo_penalizaciones = 2
+        )
+        AND EXISTS (
+            SELECT 1 FROM InhabilitacionRecurso
+            WHERE fk_recurso_id = v_recurso
+              AND fecha_reactivado IS NOT NULL
+        ),
+        'R17 reactivo el recurso, reinicio sus penalizaciones y conservo el historial.',
+        format('La reactivacion no completo el ciclo esperado; estado final %s.', v_estado));
+
+    PERFORM pg_temp.sim_afirmar('07-AVANZADAS', 'R17 ignora otras bajas',
+        v_estado_ajeno = 'Fuera de servicio',
+        'R17 ignoro el recurso fuera de servicio sin inhabilitacion por penalizaciones.',
+        format('R17 modifico indebidamente el recurso ajeno, que quedo %s.', v_estado_ajeno));
 EXCEPTION WHEN OTHERS THEN
-    PERFORM pg_temp.sim_capturar_error('07-AVANZADAS', 'Reactivacion temporal', SQLERRM);
+    PERFORM pg_temp.sim_capturar_error('07-AVANZADAS', 'Bloqueo y reactivacion por penalizaciones', SQLERRM);
 END;
 $$;
 

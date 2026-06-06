@@ -133,15 +133,26 @@ WHERE er.nombre = 'Ocupado'
 CREATE OR REPLACE VIEW vRecursosPenalizados AS
 SELECT 
     r.id_recurso, 
-    tr.nombre AS tipo_recurso, 
+    tr.nombre AS tipo_recurso,
+    er.nombre AS estado_recurso,
     COUNT(p.id_penalizacion) AS cantidad_infracciones,
     SUM(COALESCE(p.puntaje, tp.puntaje)) AS puntos_acumulados,
-    MAX(p.fecha) AS ultima_penalizacion
+    MAX(p.fecha) AS ultima_penalizacion,
+    r.cantidad_penalizaciones AS penalizaciones_vigentes,
+    r.ciclo_penalizaciones,
+    ir.fecha_inhabilitacion,
+    ir.fecha_reactivacion_programada
 FROM Recurso r
 JOIN Penalizacion p ON r.id_recurso = p.fk_recurso_id
 JOIN TipoRecurso tr ON r.fk_tipo_recurso_id = tr.id_tipo_recurso
+JOIN EstadoRecurso er ON r.fk_estado_recurso_id = er.id_estado_recurso
 JOIN TipoPenalizacion tp ON p.fk_tipo_penalizacion_id = tp.id_tipo_penalizacion
-GROUP BY r.id_recurso, tr.nombre
+LEFT JOIN InhabilitacionRecurso ir
+  ON ir.fk_recurso_id = r.id_recurso
+ AND ir.fecha_reactivado IS NULL
+GROUP BY r.id_recurso, tr.nombre, er.nombre,
+         r.cantidad_penalizaciones, r.ciclo_penalizaciones,
+         ir.fecha_inhabilitacion, ir.fecha_reactivacion_programada
 ORDER BY puntos_acumulados DESC;
 
 -- vRecursosCandidatos: Cruza la disponibilidad con la carga de trabajo histórica y las penalizaciones.

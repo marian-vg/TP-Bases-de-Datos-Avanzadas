@@ -128,6 +128,12 @@ CREATE TABLE Recurso (
     -- cumplimiento de SLA; baja con penalizaciones. El motor de asignación elige el de mayor puntaje.
     -- Arranca en 0 (el dataset base no trae historial operativo). Puede ser negativo.
     puntaje INT NOT NULL DEFAULT 0,
+    -- Contador de sanciones vigentes desde la última reactivación. El historial completo
+    -- permanece en Penalizacion; este valor derivado permite aplicar el bloqueo operativo.
+    cantidad_penalizaciones INT NOT NULL DEFAULT 0 CHECK (cantidad_penalizaciones >= 0),
+    -- Se incrementa cada vez que el recurso sale de una inhabilitación. Las penalizaciones
+    -- quedan asociadas al ciclo en que ocurrieron para no mezclar sanciones históricas.
+    ciclo_penalizaciones INT NOT NULL DEFAULT 1 CHECK (ciclo_penalizaciones > 0),
     CONSTRAINT fk_recurso_tipo FOREIGN KEY (fk_tipo_recurso_id)
         REFERENCES TipoRecurso(id_tipo_recurso) ON DELETE RESTRICT,
     CONSTRAINT fk_recurso_zona_base FOREIGN KEY (fk_zona_base_id) 
@@ -135,6 +141,28 @@ CREATE TABLE Recurso (
     CONSTRAINT fk_recurso_estado FOREIGN KEY (fk_estado_recurso_id) 
         REFERENCES EstadoRecurso(id_estado_recurso) ON DELETE RESTRICT
 );
+
+-- Historial de bloqueos temporales originados por acumulación de penalizaciones.
+-- Un recurso puede tener muchas inhabilitaciones históricas, pero solo una activa.
+CREATE TABLE InhabilitacionRecurso (
+    id_inhabilitacion BIGSERIAL PRIMARY KEY,
+    fk_recurso_id INT NOT NULL,
+    fecha_inhabilitacion TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    fecha_reactivacion_programada TIMESTAMP NOT NULL,
+    fecha_reactivado TIMESTAMP NULL,
+    cantidad_penalizaciones INT NOT NULL CHECK (cantidad_penalizaciones > 0),
+    motivo TEXT NOT NULL,
+    CONSTRAINT fk_inhabilitacion_recurso FOREIGN KEY (fk_recurso_id)
+        REFERENCES Recurso(id_recurso) ON DELETE CASCADE,
+    CONSTRAINT ck_fechas_inhabilitacion CHECK (
+        fecha_reactivacion_programada >= fecha_inhabilitacion
+        AND (fecha_reactivado IS NULL OR fecha_reactivado >= fecha_inhabilitacion)
+    )
+);
+
+CREATE UNIQUE INDEX uq_inhabilitacion_recurso_activa
+ON InhabilitacionRecurso (fk_recurso_id)
+WHERE fecha_reactivado IS NULL;
 
 -- Tabla intermedia (M:N) para gestionar las zonas en las que un recurso está habilitado (R10 / R15)
 CREATE TABLE ZonaRecurso (
@@ -237,6 +265,7 @@ CREATE TABLE Penalizacion (
     fecha DATE NOT NULL DEFAULT CURRENT_DATE,
     hora TIME NOT NULL DEFAULT CURRENT_TIME,
     puntaje INT NULL, -- Puntos reales de esta penalización; NULL usa TipoPenalizacion.puntaje vía COALESCE (R4/R9 conservan el default, P4 calcula proporcional).
+    ciclo_penalizaciones INT NOT NULL, -- Ciclo vigente del recurso al generarse; permite conservar historial sin contar sanciones ya rehabilitadas.
     motivo TEXT NOT NULL,
     CONSTRAINT fk_penalizacion_recurso FOREIGN KEY (fk_recurso_id) 
         REFERENCES Recurso(id_recurso) ON DELETE CASCADE,

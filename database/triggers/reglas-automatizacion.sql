@@ -570,7 +570,13 @@ BEGIN
 
         UPDATE Recurso
         SET fk_estado_recurso_id = v_id_estado_disponible
-        WHERE id_recurso = NEW.fk_recurso_id;
+        WHERE id_recurso = NEW.fk_recurso_id
+          AND NOT EXISTS (
+              SELECT 1
+              FROM InhabilitacionRecurso ir
+              WHERE ir.fk_recurso_id = NEW.fk_recurso_id
+                AND ir.fecha_reactivado IS NULL
+          );
 
         -- b) R7: Si el incidente ya no tiene asignaciones abiertas Y al menos una fue exitosa,
         --    marcarlo como 'Resuelto' (solo si su estado actual lo permite).
@@ -753,6 +759,13 @@ CREATE TRIGGER trg_audit_penalizacion
 AFTER INSERT OR UPDATE OR DELETE ON Penalizacion
 FOR EACH ROW
 EXECUTE FUNCTION fn_auditoria('id_penalizacion');
+
+-- ---- InhabilitacionRecurso ----
+DROP TRIGGER IF EXISTS trg_audit_inhabilitacion_recurso ON InhabilitacionRecurso;
+CREATE TRIGGER trg_audit_inhabilitacion_recurso
+AFTER INSERT OR UPDATE OR DELETE ON InhabilitacionRecurso
+FOR EACH ROW
+EXECUTE FUNCTION fn_auditoria('id_inhabilitacion');
 
 -- ---- Evento ----
 DROP TRIGGER IF EXISTS trg_audit_evento ON Evento;
