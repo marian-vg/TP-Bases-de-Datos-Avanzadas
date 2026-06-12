@@ -1,0 +1,41 @@
+:root {
+  /* ── Core palette ── */
+  --hud-bg: #0a0e14;
+  --hud-bg-raised: #111820;
+  --hud-bg-surface: #151d28;
+  --hud-bg-panel: rgba(17, 24, 32, 0.92);
+  --hud-bg-panel-header: rgba(21, 29, 40, 0.95);
+  --hud-border: rgba(56, 189, 248, 0.12);
+  --hud-border-active: rgba(56, 189, 248, 0.35);
+  --hud-glow: rgba(56, 189, 248, 0.08);
+
+  /* ── Text ── */
+  --hud-text: #e2e8f0;
+  --hud-text-muted: #7a8ba3;
+  --hud-text-dim: #4a5568;
+
+  /* ── Accents ── */
+  --accent-cyan: #38bdf8;
+  --accent-emerald: #34d399;
+  --accent-amber: #fbbf24;
+  --accent-red: #f87171;
+  --accent-pink: #f472b6;
+  --accent-violet: #a78bfa;
+
+  /* ── Semantic ── */
+  --risk-low: #34d399;
+  --risk-moderate: #fbbf24;
+  --risk-high: #fb923c;
+  --risk-critical: #f87171;
+
+  /* ── Fonts ── */
+  --font-sans: 'Geist Variable', 'Segoe UI', system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace;
+
+  /* ── Sizing ── */
+  --header-h: 44px;
+  --statusbar-h: 32px;
+  --hotbar-h: 52px;
+  --sidebar-w: 360px;
+  --drawer-h: 260px;
+}
