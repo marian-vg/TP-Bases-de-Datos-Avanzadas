@@ -1,6 +1,6 @@
-# Pulse City Game
+# Smart City Game
 
-Simulador visual para la BD activa `smart_city`, encapsulado dentro de este repo en `pulse-city-game/` sin modificar el esquema canonico del TP.
+Simulador visual para la BD activa `smart_city`, encapsulado dentro de este repo en `smart-city-game/` sin modificar el esquema canonico del TP.
 
 ## Estructura
 
@@ -15,20 +15,20 @@ Simulador visual para la BD activa `smart_city`, encapsulado dentro de este repo
 Desde la raiz del repo puedes levantar todo junto con:
 
 ```powershell
-.\start-pulse-city.ps1
+.\start-smart-city.ps1
 ```
 
 O con doble click / terminal clasica de Windows:
 
 ```cmd
-start-pulse-city.cmd
+start-smart-city.cmd
 ```
 
 Opciones utiles:
 
 ```powershell
-.\start-pulse-city.ps1 -NoBuild
-.\start-pulse-city.ps1 -NoOpenBrowser
+.\start-smart-city.ps1 -NoBuild
+.\start-smart-city.ps1 -NoOpenBrowser
 ```
 
 ### Stack Docker recomendado
@@ -43,7 +43,7 @@ docker compose up -d
 Luego levantar el simulador:
 
 ```powershell
-Set-Location "C:\Users\Gime\Desktop\TP-Bases-de-Datos-Avanzadas\pulse-city-game"
+Set-Location "C:\Users\Gime\Desktop\TP-Bases-de-Datos-Avanzadas\smart-city-game"
 docker compose up -d
 ```
 
@@ -55,14 +55,14 @@ URLs:
 ### Backend
 
 ```powershell
-Set-Location "C:\Users\Gime\Desktop\TP-Bases-de-Datos-Avanzadas\pulse-city-game\backend"
+Set-Location "C:\Users\Gime\Desktop\TP-Bases-de-Datos-Avanzadas\smart-city-game\backend"
 python -m uvicorn app.main:app --host 0.0.0.0 --port 8000
 ```
 
 ### Frontend
 
 ```powershell
-Set-Location "C:\Users\Gime\Desktop\TP-Bases-de-Datos-Avanzadas\pulse-city-game\frontend"
+Set-Location "C:\Users\Gime\Desktop\TP-Bases-de-Datos-Avanzadas\smart-city-game\frontend"
 npm run dev -- --host 0.0.0.0 --port 5173
 ```
 

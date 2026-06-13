@@ -6,7 +6,7 @@ param(
 $ErrorActionPreference = "Stop"
 
 $repoRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
-$gameRoot = Join-Path $repoRoot "pulse-city-game"
+$gameRoot = Join-Path $repoRoot "smart-city-game"
 $frontendUrl = "http://localhost:5173"
 $backendHealthUrl = "http://localhost:8000/api/v1/health"
 $dbContainerName = "bd_smartcity_tp"
@@ -73,7 +73,7 @@ try {
 Write-Step "Esperando que PostgreSQL quede listo"
 Wait-ForContainerHealth -containerName $dbContainerName
 
-Write-Step "Levantando Pulse City"
+Write-Step "Levantando Smart City"
 Push-Location $gameRoot
 try {
     if ($NoBuild) {
@@ -90,7 +90,7 @@ Wait-ForHttpOk -url $backendHealthUrl
 Wait-ForHttpOk -url $frontendUrl
 
 Write-Host ""
-Write-Host "Pulse City esta listo." -ForegroundColor Green
+Write-Host "Smart City esta listo." -ForegroundColor Green
 Write-Host "Frontend: $frontendUrl"
 Write-Host "Backend:  $backendHealthUrl"
 

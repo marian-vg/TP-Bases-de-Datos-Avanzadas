@@ -35,6 +35,25 @@ def call_simular_eventos_sync(sensor_id: int, tipo_evento_id: int) -> int | None
             return row[0] if row else None
 
 
+def get_promocion_mapeo_sync(tipo_evento_id: int) -> dict | None:
+    """Deriva tipo_incidente/gravedad desde la BD (TipoEventoTipoIncidente),
+    misma fuente de verdad que usa el trigger de promocion (fn_evento_promocion).
+    Replica su regla: solo promueve si existe exactamente un mapeo."""
+    pool = get_pool()
+    with pool.connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """SELECT fk_tipo_incidente_id, fk_gravedad_id
+                   FROM TipoEventoTipoIncidente
+                   WHERE fk_tipo_evento_id = %s;""",
+                (tipo_evento_id,),
+            )
+            rows = cur.fetchall()
+            if len(rows) != 1:
+                return None
+            return {"tipo_incidente_id": rows[0][0], "gravedad_id": rows[0][1]}
+
+
 def find_incidente_by_evento_sync(evento_id: int) -> dict | None:
     pool = get_pool()
     with pool.connection() as conn:
@@ -89,7 +108,11 @@ def insert_incidente_sync(
                        fk_evento_id, fk_tipo_incidente_id, fk_gravedad_id,
                        fk_estado_incidente_id, fk_zona_id,
                        fecha_hora_registro, descripcion, prioridad
-                   ) VALUES (%s, %s, %s, 1, %s, %s, %s, 0)
+                   ) VALUES (
+                       %s, %s, %s,
+                       (SELECT id_estado_incidente FROM EstadoIncidente WHERE nombre = 'Pendiente'),
+                       %s, %s, %s, 0
+                   )
                    RETURNING id_incidente;""",
                 (evento_id, tipo_incidente_id, gravedad_id, zona_id, sim_now, descripcion),
             )

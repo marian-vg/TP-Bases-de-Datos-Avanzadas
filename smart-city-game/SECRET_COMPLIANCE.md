@@ -1,15 +1,15 @@
 # Cumplimiento de `top_secret/specs.md`
 
 Este archivo deja trazabilidad directa entre el plan secreto y la implementacion ubicada en
-`pulse-city-game/`. La capa del juego es complementaria al TP: no reemplaza la BD, no cambia su
+`smart-city-game/`. La capa del juego es complementaria al TP: no reemplaza la BD, no cambia su
 esquema y no agrega tablas, triggers ni procedures.
 
 ## Decisiones duras respetadas
 
 | Punto de `/top_secret/specs.md` | Estado | Evidencia |
 |---|---|---|
-| Juego separado, por encima del TP | Cumplido | Todo vive dentro de `pulse-city-game/`, carpeta aislada del repo original. |
-| No modificar esquema de la BD | Cumplido | No hay DDL en `pulse-city-game/`; solo lectura, `INSERT Evento`, `INSERT Incidente` del operador y timestamps de `Asignacion`. |
+| Juego separado, por encima del TP | Cumplido | Todo vive dentro de `smart-city-game/`, carpeta aislada del repo original. |
+| No modificar esquema de la BD | Cumplido | No hay DDL en `smart-city-game/`; solo lectura, `INSERT Evento`, `INSERT Incidente` del operador y timestamps de `Asignacion`. |
 | BD como fuente de verdad | Cumplido | Las reglas de negocio se observan leyendo la BD y sus vistas; el backend no decide asignaciones ni penalizaciones. |
 | Backend delgado FastAPI | Cumplido | Routers, repositories y services separados; sin ORM ni modelo paralelo de dominio. |
 | React + Vite, mapa 2D simple | Cumplido | Frontend SPA con grafo SVG y polling. No usa Unity, Phaser ni motor externo. |
@@ -28,7 +28,7 @@ esquema y no agrega tablas, triggers ni procedures.
 ## Pruebas ejecutadas
 
 ```powershell
-python -m compileall -f pulse-city-game\backend\app
+python -m compileall -f smart-city-game\backend\app
 npm run build
 docker compose build
 docker compose up -d

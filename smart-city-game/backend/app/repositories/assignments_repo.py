@@ -66,10 +66,12 @@ def get_open_assignments_without_arrival_sync() -> list[dict]:
                           a.timestamp_asignacion,
                           r.fk_zona_base_id as zona_origen,
                           i.fk_zona_id as zona_destino,
-                          r.fk_estado_recurso_id
+                          r.fk_estado_recurso_id,
+                          sla.tiempo_respuesta_minutos AS sla_minutos
                    FROM Asignacion a
                    JOIN Recurso r ON a.fk_recurso_id = r.id_recurso
                    JOIN Incidente i ON a.fk_incidente_id = i.id_incidente
+                   LEFT JOIN SLA sla ON sla.fk_gravedad_id = i.fk_gravedad_id
                    WHERE a.timestamp_llegada IS NULL
                      AND a.estado_exito IS NULL;""",
             )

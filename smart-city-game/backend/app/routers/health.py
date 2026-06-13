@@ -7,7 +7,7 @@ router = APIRouter(prefix="/api/v1/health", tags=["health"])
 
 @router.get("")
 async def health():
-    return {"status": "ok", "service": "pulse-city-backend"}
+    return {"status": "ok", "service": "smart-city-backend"}
 
 
 @router.get("/db")

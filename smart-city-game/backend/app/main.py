@@ -17,7 +17,7 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(
-    title="Pulse City: Operador de Crisis",
+    title="Smart City: Operador de Crisis",
     version="1.0.0",
     lifespan=lifespan,
 )

@@ -44,6 +44,7 @@ def _tick_sync():
                     zona_origen=a["zona_origen"],
                     zona_destino=a["zona_destino"],
                     timestamp_asignacion=a["timestamp_asignacion"],
+                    sla_minutos=a.get("sla_minutos"),
                 )
 
         physical_world.process_arrivals_sync()
@@ -75,7 +76,6 @@ def _generate_random_catastrophe_sync():
         return
 
     from ..repositories import catalogs_repo, events_repo
-    from ..config import CONFIDENCE_THRESHOLD
 
     catastrofes = list(mapping_data.keys())
     ahora = asyncio.get_event_loop().time()
@@ -105,7 +105,10 @@ def _generate_random_catastrophe_sync():
     cooldown = mapping_svc.get_cooldown_sync(cat)
     _cooldowns_until[cat] = ahora + cooldown
 
-    if sensor["confianza"] <= CONFIDENCE_THRESHOLD:
+    # No duplicamos el umbral de confianza (R21) en el backend: leemos de vuelta si la
+    # BD ya promovio el evento a incidente. Si no, lo toma el operador simulado.
+    incidente = events_repo.find_incidente_by_evento_sync(evento_id)
+    if incidente is None:
         operator.enqueue_operator_review(
             evento_id=evento_id,
             zona_id=zona_id,

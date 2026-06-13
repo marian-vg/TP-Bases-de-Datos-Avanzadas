@@ -25,7 +25,7 @@ export default function GameTopbar({ state }: GameTopbarProps) {
         <div className="brand-icon">
           <CircuitBoard size={16} />
         </div>
-        <span className="brand-title">Pulse City</span>
+        <span className="brand-title">Smart City</span>
       </div>
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, flex: 1, flexWrap: 'wrap' }}>

@@ -40,7 +40,7 @@ function App() {
       <div className="loading-screen">
         <div className="loading-spinner" />
         <div style={{ color: 'var(--accent-cyan)', fontSize: 13, fontWeight: 700, fontFamily: 'var(--font-mono)', letterSpacing: '0.1em', textTransform: 'uppercase' }}>
-          Conectando con Pulse City...
+          Conectando con Smart City...
         </div>
       </div>
     )
@@ -54,7 +54,7 @@ function App() {
           ⚠
         </div>
         <div style={{ color: 'var(--hud-text)', fontSize: 16, fontWeight: 700 }}>
-          Pulse City no pudo cargar estado
+          Smart City no pudo cargar estado
         </div>
         <div style={{ color: 'var(--hud-text-muted)', fontSize: 12, maxWidth: 400, textAlign: 'center' }}>
           {error}

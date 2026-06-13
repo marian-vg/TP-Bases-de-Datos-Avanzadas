@@ -2,7 +2,6 @@ from fastapi import APIRouter, HTTPException
 from ..services import mapping, clock
 from ..repositories import catalogs_repo, events_repo
 from ..services import operator
-from ..config import CONFIDENCE_THRESHOLD
 from ..schemas.catastrophes import CatastropheRequest
 
 router = APIRouter(prefix="/api/v1", tags=["catastrophes"])

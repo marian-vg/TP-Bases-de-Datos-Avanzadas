@@ -1,18 +1,20 @@
-from datetime import datetime, timedelta
-import asyncio
+from datetime import datetime
+import random
+
 from ..repositories import events_repo
-from . import mapping, clock
+from ..config import OPERATOR_REVIEW_MIN_DELAY, OPERATOR_REVIEW_MAX_DELAY
+from . import clock
 
 _pending_reviews: dict[int, dict] = {}
-_pending_tasks: set = set()
 
 
 def enqueue_operator_review(evento_id: int, zona_id: int, tipo_evento_id: int):
+    delay = random.randint(OPERATOR_REVIEW_MIN_DELAY, OPERATOR_REVIEW_MAX_DELAY)
     _pending_reviews[evento_id] = {
         "evento_id": evento_id,
         "zona_id": zona_id,
         "tipo_evento_id": tipo_evento_id,
-        "scheduled_at_real": datetime.utcnow().timestamp() + 15 + (hash(str(evento_id)) % 46),
+        "scheduled_at_real": datetime.utcnow().timestamp() + delay,
     }
 
 
@@ -36,22 +38,18 @@ def process_pending_reviews_sync():
 
     for evento_id, review in due:
         del _pending_reviews[evento_id]
-        mapping_data = mapping.load_mapping_sync()
 
-        incidencias = None
-        for cat, info in mapping_data.items():
-            if info["tipo_evento_id"] == review["tipo_evento_id"]:
-                incidencias = info["incidentes"]
-                break
+        # Mismo origen de verdad que el camino inmediato (>80%): el mapeo
+        # tipo_evento -> tipo_incidente/gravedad vive en la BD, no en config del juego.
+        mapeo = events_repo.get_promocion_mapeo_sync(review["tipo_evento_id"])
 
-        if incidencias and len(incidencias) > 0:
-            inc = incidencias[0]
+        if mapeo:
             sim = clock.sim_now()
             try:
                 incidente_id = events_repo.insert_incidente_sync(
                     evento_id=evento_id,
-                    tipo_incidente_id=inc["tipo_incidente_id"],
-                    gravedad_id=inc["gravedad_id"],
+                    tipo_incidente_id=mapeo["tipo_incidente_id"],
+                    gravedad_id=mapeo["gravedad_id"],
                     zona_id=review["zona_id"],
                     sim_now=sim,
                     descripcion=f"Operador confirma incidente por evento {evento_id}",
