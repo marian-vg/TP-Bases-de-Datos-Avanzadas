@@ -1,6 +1,6 @@
 from fastapi import APIRouter
 from pydantic import BaseModel
-from ..services import scheduler, clock
+from ..services import scheduler, clock, game_feed
 
 router = APIRouter(prefix="/api/v1/simulation", tags=["simulation"])
 
@@ -89,6 +89,15 @@ async def storm_mode(req: StormRequest):
             results.append({"catastrofe": cat, "zona": zona_id, "coverage": "none"})
             continue
 
+        game_feed.add(
+            kind="attack",
+            title="Storm mode",
+            message=f"Ráfaga {cat.replace('_', ' ')} sobre zona {zona_id}.",
+            zona_id=zona_id,
+            severity="danger",
+            meta={"catastrophe": cat},
+        )
+
         evento_id = events_repo.insert_evento_sync(
             sensor_id=sensor["id_sensor"],
             tipo_evento_id=info["tipo_evento_id"],
@@ -101,6 +110,19 @@ async def storm_mode(req: StormRequest):
                 evento_id=evento_id,
                 zona_id=zona_id,
                 tipo_evento_id=info["tipo_evento_id"],
+                sensor_id=sensor["id_sensor"],
+                sensor_nombre=sensor.get("sensor_nombre"),
+                tipo_sensor=sensor.get("tipo_sensor_nombre"),
+                sensor_confianza=sensor.get("confianza"),
+            )
+        else:
+            game_feed.add(
+                kind="sensor",
+                title="Sensor confirma storm",
+                message=f"Evento {evento_id} promovido a incidente {incidente['id_incidente']}.",
+                zona_id=zona_id,
+                severity="success",
+                dedupe_key=f"storm-incident:{evento_id}",
             )
 
         results.append({

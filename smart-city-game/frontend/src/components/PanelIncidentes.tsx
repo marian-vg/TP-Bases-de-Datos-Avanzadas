@@ -7,11 +7,20 @@ function getGravityStyle(g: number) {
   return 'badge-severity badge-severity--low'
 }
 
-export default function PanelIncidentes({ state }: { state: any }) {
+function selectedZoneName(state: any, selectedZoneId: number | null) {
+  if (!selectedZoneId) return null
+  return state?.zonas?.find((zona: any) => zona.id_zona === selectedZoneId)?.nombre || null
+}
+
+export default function PanelIncidentes({ state, selectedZoneId }: { state: any; selectedZoneId?: number | null }) {
   const [closing, setClosing] = useState<number | null>(null)
   const [error, setError] = useState<string | null>(null)
 
-  const incidentes = state?.incidentesActivos || []
+  const zona = selectedZoneName(state, selectedZoneId ?? null)
+  const incidentes = (state?.incidentesActivos || []).filter((inc: any) => {
+    if (!selectedZoneId) return true
+    return inc.fk_zona_id === selectedZoneId || inc.zona_id === selectedZoneId || inc.zona === zona
+  })
 
   const handleClose = async (id: number) => {
     setClosing(id)
@@ -27,58 +36,35 @@ export default function PanelIncidentes({ state }: { state: any }) {
   }
 
   if (incidentes.length === 0) {
-    return <div className="panel-empty">Sin incidentes activos</div>
+    return <div className="panel-empty">{selectedZoneId ? 'La zona no tiene incidentes activos' : 'Sin incidentes activos'}</div>
   }
 
   return (
-    <div style={{ padding: '4px 0' }}>
-      {error && (
-        <div style={{ margin: '4px 8px', padding: '4px 8px', borderRadius: 4, fontSize: 10, background: 'rgba(248,113,113,0.08)', border: '1px solid rgba(248,113,113,0.2)', color: 'var(--accent-red)' }}>
-          {error}
-        </div>
-      )}
-      <table className="hud-table">
-        <thead>
-          <tr>
-            <th>ID</th>
-            <th>Tipo</th>
-            <th>G</th>
-            <th>Zona</th>
-            <th>Min</th>
-            <th>Estado</th>
-            <th></th>
-          </tr>
-        </thead>
-        <tbody>
-          {incidentes.map((inc: any) => (
-            <tr key={inc.id_incidente ?? inc.id}>
-              <td style={{ fontFamily: 'var(--font-mono)', fontWeight: 600 }}>#{inc.id_incidente ?? inc.id}</td>
-              <td>{inc.tipo || inc.tipo_incidente || '-'}</td>
-              <td>
-                <span className={getGravityStyle(Number(inc.gravedad_id ?? inc.gravedad ?? 0))}>
-                  {inc.gravedad || inc.gravedad_id || '-'}
-                </span>
-              </td>
-              <td>{inc.zona || '-'}</td>
-              <td style={{ fontFamily: 'var(--font-mono)' }}>{inc.minutos_transcurridos || inc.minutosTranscurridos || 0}</td>
-              <td>
-                <span className="badge-status">
-                  {inc.estado_actual || inc.estado || 'activo'}
-                </span>
-              </td>
-              <td style={{ textAlign: 'right' }}>
-                <button
-                  className="action-btn"
-                  onClick={() => handleClose(inc.id_incidente ?? inc.id)}
-                  disabled={closing === (inc.id_incidente ?? inc.id)}
-                >
-                  {closing === (inc.id_incidente ?? inc.id) ? '...' : 'Cerrar'}
-                </button>
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+    <div className="panel-list">
+      {error && <div className="panel-error">{error}</div>}
+      {incidentes.map((inc: any) => {
+        const id = inc.id_incidente ?? inc.id
+        const gravedad = Number(inc.gravedad_id ?? inc.gravedad ?? 0)
+        return (
+          <article key={id} className="incident-card">
+            <div className="incident-card-topline">
+              <span className="incident-id">#{id}</span>
+              <span className={getGravityStyle(gravedad)}>{inc.gravedad || inc.gravedad_id || 'G'}</span>
+            </div>
+            <h3>{inc.tipo || inc.tipo_incidente || 'Incidente sin tipo'}</h3>
+            <p>{inc.descripcion || 'La ciudad registró el evento y activó el circuito de respuesta.'}</p>
+            <div className="incident-meta-grid">
+              <span><strong>Zona</strong>{inc.zona || zona || '-'}</span>
+              <span><strong>Minutos</strong>{inc.minutos_transcurridos || inc.minutosTranscurridos || 0}</span>
+              <span><strong>Estado</strong>{inc.estado_actual || inc.estado || 'activo'}</span>
+              <span><strong>Prioridad</strong>{inc.prioridad ?? '-'}</span>
+            </div>
+            <button className="action-btn incident-close" onClick={() => handleClose(id)} disabled={closing === id}>
+              {closing === id ? 'Cerrando...' : 'Cerrar incidente'}
+            </button>
+          </article>
+        )
+      })}
     </div>
   )
 }

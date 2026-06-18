@@ -1,4 +1,4 @@
-import { CircuitBoard, AlertTriangle, Ambulance, Hourglass, Database, Activity } from 'lucide-react'
+import { CircuitBoard, AlertTriangle, Ambulance, Hourglass, Database, Activity, Gauge } from 'lucide-react'
 
 interface GameTopbarProps {
   state: any
@@ -11,6 +11,8 @@ export default function GameTopbar({ state }: GameTopbarProps) {
   const penalizaciones = state?.penalizaciones?.length ?? 0
   const dbStatus = state?.dbStatus ?? 'OK'
   const score = state?.score ?? state?.puntaje ?? 0
+  const pressure = state?.cityPressure?.global ?? 0
+  const pressureLevel = state?.cityPressure?.level ?? 'estable'
 
   const zonas = state?.zonas || []
   const riesgoCount = { bajo: 0, moderado: 0, alto: 0, critico: 0 }
@@ -74,6 +76,12 @@ export default function GameTopbar({ state }: GameTopbarProps) {
       </div>
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginLeft: 'auto' }}>
+        <div className="pressure-chip" title="Índice derivado de incidentes, revisiones, recursos ocupados y penalizaciones">
+          <Gauge size={12} />
+          <span className="metric-label">Presión</span>
+          <div className="pressure-meter"><span style={{ width: `${pressure}%` }} /></div>
+          <span className="metric-value">{Math.round(pressure)} · {pressureLevel}</span>
+        </div>
         <div className="metric-chip">
           <span className="metric-label">Puntaje</span>
           <span className="metric-value" style={{ color: 'var(--accent-emerald)' }}>{score}</span>

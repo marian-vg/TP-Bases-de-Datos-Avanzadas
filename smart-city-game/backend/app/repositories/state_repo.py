@@ -1,5 +1,5 @@
 from ..db import get_pool
-from ..services import operator, physical_world
+from ..services import operator, physical_world, city_pressure, game_feed
 
 
 def get_full_state_sync(sim_now) -> dict:
@@ -96,6 +96,44 @@ def get_full_state_sync(sim_now) -> dict:
             cols = [d.name for d in cur.description]
             logs = [dict(zip(cols, r)) for r in cur]
 
+            cur.execute(
+                """SELECT e.id_evento, e.fecha_evento, e.hora_evento,
+                          te.nombre AS tipo_evento,
+                          s.id_sensor, s.nombre AS sensor,
+                          z.id_zona, z.nombre AS zona,
+                          fn_confianza_sensor(s.id_sensor) AS confianza,
+                          i.id_incidente
+                   FROM Evento e
+                   JOIN TipoEvento te ON e.fk_tipo_evento_id = te.id_tipo_evento
+                   JOIN Sensor s ON e.fk_sensor_id = s.id_sensor
+                   JOIN Zona z ON s.fk_zona_id = z.id_zona
+                   LEFT JOIN Incidente i ON i.fk_evento_id = e.id_evento
+                   ORDER BY e.id_evento DESC
+                   LIMIT 50;"""
+            )
+            cols = [d.name for d in cur.description]
+            eventos_recientes = [dict(zip(cols, r)) for r in cur]
+
+    eventos_en_revision = operator.get_pending_reviews()
+    zonas_por_id = {z["id_zona"]: z["nombre"] for z in zonas}
+    tipos_evento = {e["id_evento"]: e for e in eventos_recientes}
+    for evento in eventos_en_revision:
+        reciente = tipos_evento.get(evento["evento_id"])
+        evento["zona"] = zonas_por_id.get(evento.get("zona_id"))
+        if reciente:
+            evento["tipo_evento"] = reciente.get("tipo_evento")
+            evento["sensor"] = reciente.get("sensor")
+            evento["confianza"] = reciente.get("confianza")
+
+    sensor_confidence = city_pressure.sensor_confidence_by_zone(zonas, sensores)
+    pressure = city_pressure.calculate(
+        zonas=zonas,
+        incidentes=incidentes_activos,
+        recursos=recursos,
+        revisiones=eventos_en_revision,
+        penalizaciones=penalties,
+    )
+
     return {
         "simNow": sim_now.isoformat(),
         "dbStatus": "OK",
@@ -109,7 +147,11 @@ def get_full_state_sync(sim_now) -> dict:
         "recursosPenalizados": penalizados,
         "asignacionesActivas": asignaciones_activas,
         "viajesActivos": physical_world.get_active_trips(),
-        "eventosEnRevision": operator.get_pending_reviews(),
+        "eventosEnRevision": eventos_en_revision,
+        "eventosRecientes": eventos_recientes,
+        "sensorConfidenceByZone": sensor_confidence,
+        "cityPressure": pressure,
+        "gameFeed": game_feed.recent(),
         "penalizaciones": penalties,
         "logsRecientes": logs,
     }

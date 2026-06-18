@@ -52,8 +52,8 @@ CATASTROPHE_SENSOR_TYPES = {
     "robo": ["Cámara de vigilancia", "Sensor de movimiento"],
 }
 
-OPERATOR_REVIEW_MIN_DELAY = 15
-OPERATOR_REVIEW_MAX_DELAY = 60
+OPERATOR_REVIEW_MIN_DELAY = int(os.getenv("OPERATOR_REVIEW_MIN_DELAY", "5"))
+OPERATOR_REVIEW_MAX_DELAY = int(os.getenv("OPERATOR_REVIEW_MAX_DELAY", "25"))
 
 VIEW_ALLOWLIST = frozenset({
     "vincidentesactivos",

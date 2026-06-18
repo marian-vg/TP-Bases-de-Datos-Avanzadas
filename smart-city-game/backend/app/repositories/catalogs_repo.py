@@ -81,7 +81,8 @@ def find_capable_sensor_sync(zona_id: int, tipos_sensor_ids: list[int]) -> dict 
             lugar = ", ".join("%s" for _ in tipos_sensor_ids)
             cur.execute(
                 f"""SELECT s.id_sensor, s.fk_tipo_sensor_id, ts.nombre, s.fk_zona_id,
-                           fn_confianza_sensor(s.id_sensor) as confianza
+                           fn_confianza_sensor(s.id_sensor) as confianza,
+                           s.nombre as sensor_nombre
                     FROM Sensor s
                     JOIN TipoSensor ts ON s.fk_tipo_sensor_id = ts.id_tipo_sensor
                     WHERE s.fk_zona_id = %s AND s.fk_tipo_sensor_id IN ({lugar})
@@ -98,4 +99,5 @@ def find_capable_sensor_sync(zona_id: int, tipos_sensor_ids: list[int]) -> dict 
                 "tipo_sensor_nombre": row[2],
                 "zona_id": row[3],
                 "confianza": row[4],
+                "sensor_nombre": row[5],
             }

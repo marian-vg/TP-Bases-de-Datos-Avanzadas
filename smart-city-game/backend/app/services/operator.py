@@ -3,28 +3,62 @@ import random
 
 from ..repositories import events_repo
 from ..config import OPERATOR_REVIEW_MIN_DELAY, OPERATOR_REVIEW_MAX_DELAY
-from . import clock
+from . import clock, game_feed
 
 _pending_reviews: dict[int, dict] = {}
 
 
-def enqueue_operator_review(evento_id: int, zona_id: int, tipo_evento_id: int):
+def enqueue_operator_review(
+    evento_id: int,
+    zona_id: int,
+    tipo_evento_id: int,
+    sensor_id: int | None = None,
+    sensor_nombre: str | None = None,
+    tipo_sensor: str | None = None,
+    sensor_confianza=None,
+):
     delay = random.randint(OPERATOR_REVIEW_MIN_DELAY, OPERATOR_REVIEW_MAX_DELAY)
     _pending_reviews[evento_id] = {
         "evento_id": evento_id,
         "zona_id": zona_id,
         "tipo_evento_id": tipo_evento_id,
+        "sensor_id": sensor_id,
+        "sensor_nombre": sensor_nombre,
+        "tipo_sensor": tipo_sensor,
+        "sensor_confianza": float(sensor_confianza or 0),
+        "delay_seconds": delay,
         "scheduled_at_real": datetime.utcnow().timestamp() + delay,
     }
+    game_feed.add(
+        kind="operator",
+        title="Operador inicia revisión",
+        message=f"La señal requiere validación manual; confirmación estimada en {delay}s.",
+        zona_id=zona_id,
+        severity="warning",
+        dedupe_key=f"review-start:{evento_id}",
+        meta={"eventId": evento_id, "confidence": float(sensor_confianza or 0), "delay": delay},
+    )
+    return delay
 
 
 def get_pending_reviews() -> list[dict]:
     now = datetime.utcnow().timestamp()
-    return [
-        {"evento_id": v["evento_id"], "seconds_remaining": max(0, int(v["scheduled_at_real"] - now))}
-        for v in _pending_reviews.values()
-        if v["scheduled_at_real"] > now
-    ]
+    pending = []
+    for v in _pending_reviews.values():
+        if v["scheduled_at_real"] <= now:
+            continue
+        pending.append({
+            "evento_id": v["evento_id"],
+            "zona_id": v["zona_id"],
+            "tipo_evento_id": v["tipo_evento_id"],
+            "sensor_id": v.get("sensor_id"),
+            "sensor_nombre": v.get("sensor_nombre"),
+            "tipo_sensor": v.get("tipo_sensor"),
+            "sensor_confianza": v.get("sensor_confianza", 0),
+            "delay_seconds": v.get("delay_seconds"),
+            "seconds_remaining": max(0, int(v["scheduled_at_real"] - now)),
+        })
+    return pending
 
 
 def process_pending_reviews_sync():
@@ -54,10 +88,27 @@ def process_pending_reviews_sync():
                     sim_now=sim,
                     descripcion=f"Operador confirma incidente por evento {evento_id}",
                 )
+                game_feed.add(
+                    kind="operator",
+                    title="Operador confirma incidente",
+                    message=f"El evento {evento_id} fue validado y se registró como incidente {incidente_id}.",
+                    zona_id=review["zona_id"],
+                    severity="danger",
+                    dedupe_key=f"review-promoted:{evento_id}",
+                    meta={"eventId": evento_id, "incidentId": incidente_id},
+                )
                 results.append({"evento_id": evento_id, "incidente_id": incidente_id, "status": "promoted"})
             except Exception as e:
                 results.append({"evento_id": evento_id, "error": str(e), "status": "failed"})
         else:
+            game_feed.add(
+                kind="operator",
+                title="Operador descarta señal",
+                message=f"El evento {evento_id} no tiene mapeo único de incidente.",
+                zona_id=review["zona_id"],
+                severity="info",
+                dedupe_key=f"review-discard:{evento_id}",
+            )
             results.append({"evento_id": evento_id, "status": "no_mapping"})
 
     return results

@@ -1,6 +1,6 @@
 import asyncio
 import random
-from . import clock, physical_world, operator
+from . import clock, physical_world, operator, game_feed
 from ..db import get_pool
 from ..repositories import assignments_repo
 from .mapping import load_mapping_sync
@@ -94,6 +94,16 @@ def _generate_random_catastrophe_sync():
     if sensor is None:
         return
 
+    game_feed.add(
+        kind="attack",
+        title="Pulso automático",
+        message=f"La ciudad generó un evento {cat.replace('_', ' ')} en zona {zona_id}.",
+        zona_id=zona_id,
+        severity="info",
+        dedupe_key=f"auto:{cat}:{zona_id}:{int(ahora)}",
+        meta={"catastrophe": cat},
+    )
+
     evento_id = events_repo.call_simular_eventos_sync(
         sensor_id=sensor["id_sensor"],
         tipo_evento_id=info["tipo_evento_id"],
@@ -113,6 +123,20 @@ def _generate_random_catastrophe_sync():
             evento_id=evento_id,
             zona_id=zona_id,
             tipo_evento_id=info["tipo_evento_id"],
+            sensor_id=sensor["id_sensor"],
+            sensor_nombre=sensor.get("sensor_nombre"),
+            tipo_sensor=sensor.get("tipo_sensor_nombre"),
+            sensor_confianza=sensor.get("confianza"),
+        )
+    else:
+        game_feed.add(
+            kind="sensor",
+            title="Sensor confirma pulso automático",
+            message=f"{sensor.get('tipo_sensor_nombre')} confirmó el evento con confianza {round(float(sensor.get('confianza') or 0))}.",
+            zona_id=zona_id,
+            severity="success",
+            dedupe_key=f"auto-incident:{evento_id}",
+            meta={"eventId": evento_id, "incidentId": incidente["id_incidente"]},
         )
 
 

@@ -44,7 +44,7 @@ export default function Hotbar({ state, selectedCatastrophe, onSelectCatastrophe
   return (
     <div className="game-hotbar">
       <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--hud-text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginRight: 4, flexShrink: 0, fontFamily: 'var(--font-mono)' }}>
-        ⚡ Catástrofes
+        Catástrofes
       </span>
 
       {catastrofes.map((cat: any) => {
@@ -65,6 +65,7 @@ export default function Hotbar({ state, selectedCatastrophe, onSelectCatastrophe
               isSelected && !disabled && 'hotbar-slot--armed',
             )}
             onClick={() => !disabled && onSelectCatastrophe(isSelected ? null : cat.id)}
+            title={disabled ? `${cat.nombre}: enfriamiento ${remaining.toFixed(0)}s` : `${cat.nombre}: seleccionar y luego clickear una zona`}
           >
             <div className="hotbar-icon" style={{ background: gStyle.bg, color: gStyle.text }}>
               <Icon size={13} />

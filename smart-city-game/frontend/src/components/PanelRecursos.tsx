@@ -2,11 +2,14 @@ import { useState } from 'react'
 import { CircleDot, Ambulance, ShieldBan, Wrench } from 'lucide-react'
 import { reactivateResources } from '../api/client'
 
-export default function PanelRecursos({ state }: { state: any }) {
+export default function PanelRecursos({ state, selectedZoneId }: { state: any; selectedZoneId?: number | null }) {
   const [working, setWorking] = useState(false)
   const [feedback, setFeedback] = useState<string | null>(null)
 
-  const recursos = state?.recursos || []
+  const recursos = (state?.recursos || []).filter((r: any) => {
+    if (!selectedZoneId) return true
+    return r.fk_zona_base_id === selectedZoneId || r.zona_id === selectedZoneId
+  })
 
   const byEstado = recursos.reduce((acc: any, r: any) => {
     const estado = String(r.estado || 'desconocido').toLowerCase()
@@ -40,7 +43,7 @@ export default function PanelRecursos({ state }: { state: any }) {
   ]
 
   return (
-    <div style={{ padding: 8, display: 'flex', flexDirection: 'column', gap: 6 }}>
+    <div style={{ padding: 8, display: 'flex', flexDirection: 'column', gap: 8 }}>
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
         {rows.map((row) => {
           const Icon = row.icon
@@ -56,6 +59,15 @@ export default function PanelRecursos({ state }: { state: any }) {
             </div>
           )
         })}
+      </div>
+
+      <div className="resource-mini-list">
+        {recursos.slice(0, 12).map((r: any) => (
+          <div key={r.id_recurso} className="resource-mini-row">
+            <span>#{r.id_recurso} · {r.tipo_recurso}</span>
+            <strong>{r.estado}</strong>
+          </div>
+        ))}
       </div>
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>

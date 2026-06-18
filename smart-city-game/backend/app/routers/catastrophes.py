@@ -1,7 +1,7 @@
 from fastapi import APIRouter, HTTPException
 from ..services import mapping, clock
 from ..repositories import catalogs_repo, events_repo
-from ..services import operator
+from ..services import operator, game_feed
 from ..schemas.catastrophes import CatastropheRequest
 
 router = APIRouter(prefix="/api/v1", tags=["catastrophes"])
@@ -55,6 +55,15 @@ async def trigger_catastrophe(req: CatastropheRequest):
         }
 
     _last_used[req.catastropheType] = now
+    game_feed.add(
+        kind="attack",
+        title="Ataque del jugador",
+        message=f"Evento {req.catastropheType.replace('_', ' ')} inyectado en zona {req.zoneId}.",
+        zona_id=req.zoneId,
+        severity="danger",
+        dedupe_key=f"attack:{req.catastropheType}:{req.zoneId}:{int(now)}",
+        meta={"catastrophe": req.catastropheType},
+    )
 
     sim = clock.sim_now()
     evento_id = events_repo.insert_evento_sync(
@@ -67,10 +76,25 @@ async def trigger_catastrophe(req: CatastropheRequest):
     detection_mode = "immediate" if incidente else "operator_review"
 
     if detection_mode == "operator_review":
-        operator.enqueue_operator_review(
+        review_delay = operator.enqueue_operator_review(
             evento_id=evento_id,
             zona_id=req.zoneId,
             tipo_evento_id=info["tipo_evento_id"],
+            sensor_id=sensor["id_sensor"],
+            sensor_nombre=sensor.get("sensor_nombre"),
+            tipo_sensor=sensor.get("tipo_sensor_nombre"),
+            sensor_confianza=sensor["confianza"],
+        )
+    else:
+        review_delay = None
+        game_feed.add(
+            kind="sensor",
+            title="Sensor confirma incidente",
+            message=f"{sensor.get('tipo_sensor_nombre')} confirmó el evento con confianza {round(float(sensor['confianza']))}.",
+            zona_id=req.zoneId,
+            severity="success",
+            dedupe_key=f"incident:{evento_id}",
+            meta={"eventId": evento_id, "incidentId": incidente["id_incidente"] if incidente else None},
         )
 
     return {
@@ -80,6 +104,9 @@ async def trigger_catastrophe(req: CatastropheRequest):
             "coverage": "covered",
             "detectionMode": detection_mode,
             "sensorConfidence": sensor["confianza"],
+            "reviewDelaySeconds": review_delay,
+            "sensorName": sensor.get("sensor_nombre"),
+            "sensorType": sensor.get("tipo_sensor_nombre"),
         }
     }
 

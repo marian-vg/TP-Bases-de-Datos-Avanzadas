@@ -1,46 +1,43 @@
-import { Hourglass } from 'lucide-react'
+import { Hourglass, RadioTower } from 'lucide-react'
 
-export default function PanelEventosRevision({ state }: { state: any }) {
-  const eventos = state?.eventosEnRevision || []
+function selectedZoneName(state: any, selectedZoneId: number | null) {
+  if (!selectedZoneId) return null
+  return state?.zonas?.find((zona: any) => zona.id_zona === selectedZoneId)?.nombre || null
+}
+
+export default function PanelEventosRevision({ state, selectedZoneId }: { state: any; selectedZoneId?: number | null }) {
+  const zona = selectedZoneName(state, selectedZoneId ?? null)
+  const eventos = (state?.eventosEnRevision || []).filter((evento: any) => {
+    if (!selectedZoneId) return true
+    return evento.zona_id === selectedZoneId || evento.zona === zona
+  })
 
   if (eventos.length === 0) {
-    return <div className="panel-empty">Sin señales pendientes</div>
+    return <div className="panel-empty">{selectedZoneId ? 'Sin revisión pendiente en esta zona' : 'Sin señales pendientes'}</div>
   }
 
   return (
-    <div style={{ padding: '4px 6px', display: 'flex', flexDirection: 'column', gap: 4 }}>
-      {eventos.map((evento: any) => (
-        <div key={evento.evento_id} className="review-item">
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <div style={{
-              width: 28, height: 28, borderRadius: 4,
-              background: 'rgba(251,191,36,0.1)',
-              border: '1px solid rgba(251,191,36,0.2)',
-              display: 'grid', placeItems: 'center',
-              color: 'var(--accent-amber)',
-            }}>
-              <Hourglass size={13} />
-            </div>
-            <div>
-              <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--hud-text)' }}>
-                Evento #{evento.evento_id}
-              </div>
-              <div style={{ fontSize: 10, color: 'var(--hud-text-muted)' }}>
-                Esperando confirmación operativa
+    <div className="panel-list">
+      {eventos.map((evento: any) => {
+        const confidence = Math.round(Number(evento.confianza ?? evento.sensor_confianza ?? 0))
+        const totalDelay = Number(evento.delay_seconds || 25)
+        const remaining = Number(evento.seconds_remaining || 0)
+        const progress = Math.max(0, Math.min(100, ((totalDelay - remaining) / Math.max(1, totalDelay)) * 100))
+        return (
+          <article key={evento.evento_id} className="review-card">
+            <div className="review-card-main">
+              <div className="review-icon"><Hourglass size={15} /></div>
+              <div>
+                <div className="review-title">Evento #{evento.evento_id}</div>
+                <div className="review-subtitle">{evento.tipo_evento || 'Evento en validación'} en {evento.zona || zona || 'zona desconocida'}</div>
               </div>
             </div>
-          </div>
-          <span style={{
-            fontFamily: 'var(--font-mono)', fontSize: 11, fontWeight: 700,
-            color: 'var(--accent-amber)',
-            padding: '2px 6px', borderRadius: 3,
-            background: 'rgba(251,191,36,0.08)',
-            border: '1px solid rgba(251,191,36,0.2)',
-          }}>
-            {evento.seconds_remaining}s
-          </span>
-        </div>
-      ))}
+            <div className="review-sensor-line"><RadioTower size={12} /> {evento.sensor || evento.sensor_nombre || 'Sensor'} · confianza {confidence}</div>
+            <div className="review-progress"><span style={{ width: `${progress}%` }} /></div>
+            <div className="review-footer"><span>Operador verificando veracidad</span><strong>{remaining}s</strong></div>
+          </article>
+        )
+      })}
     </div>
   )
 }

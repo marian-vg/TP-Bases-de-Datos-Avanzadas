@@ -1,4 +1,5 @@
 import { useState, useCallback } from 'react'
+import { AlertTriangle } from 'lucide-react'
 import { fetchState } from './api/client'
 import { usePolling } from './api/polling'
 import MapaZonas from './components/MapaZonas'
@@ -7,6 +8,7 @@ import StatusBar from './components/StatusBar'
 import GameTopbar from './components/GameTopbar'
 import GameSidebar from './components/GameSidebar'
 import GameDrawer from './components/GameDrawer'
+import ReplayOverlay from './components/ReplayOverlay'
 
 function App() {
   const [state, setState] = useState<any>(null)
@@ -15,6 +17,9 @@ function App() {
   const [selectedCatastrophe, setSelectedCatastrophe] = useState<string | null>(null)
   const [lastTriggered, setLastTriggered] = useState<Record<string, number>>({})
   const [drawerTab, setDrawerTab] = useState<string | null>(null)
+  const [selectedZoneId, setSelectedZoneId] = useState<number | null>(null)
+  const [mapLayer, setMapLayer] = useState<'incidents' | 'confidence' | 'pressure'>('incidents')
+  const [lastReplay, setLastReplay] = useState<any>(null)
 
   const load = useCallback(async () => {
     try {
@@ -51,7 +56,7 @@ function App() {
     return (
       <div className="error-screen">
         <div style={{ width: 48, height: 48, borderRadius: 8, background: 'rgba(248,113,113,0.1)', border: '1px solid rgba(248,113,113,0.3)', display: 'grid', placeItems: 'center', color: 'var(--accent-red)', fontSize: 24 }}>
-          ⚠
+          <AlertTriangle size={24} />
         </div>
         <div style={{ color: 'var(--hud-text)', fontSize: 16, fontWeight: 700 }}>
           Smart City no pudo cargar estado
@@ -74,7 +79,7 @@ function App() {
       <GameTopbar state={state} />
 
       {/* ── Status bar: sim controls ── */}
-      <StatusBar state={state} />
+      <StatusBar state={state} mapLayer={mapLayer} onMapLayerChange={setMapLayer} />
 
       {/* ── Main area: map + sidebar ── */}
       <div className="game-main">
@@ -85,7 +90,12 @@ function App() {
             selectedCatastrophe={selectedCatastrophe}
             onSelectZoneCatastropheComplete={() => setSelectedCatastrophe(null)}
             onCatastropheTriggered={markCatastropheTriggered}
+            selectedZoneId={selectedZoneId}
+            onSelectZone={setSelectedZoneId}
+            mapLayer={mapLayer}
+            onReplay={setLastReplay}
           />
+          <ReplayOverlay replay={lastReplay} />
 
           {/* Bottom drawer (Penalizaciones / Vistas / Logs) */}
           <GameDrawer
@@ -96,7 +106,7 @@ function App() {
         </div>
 
         {/* Right sidebar (Incidentes / Recursos / Revisión) */}
-        <GameSidebar state={state} />
+        <GameSidebar state={state} selectedZoneId={selectedZoneId} onSelectZone={setSelectedZoneId} />
       </div>
 
       {/* ── Hotbar: catastrophe weapons ── */}
