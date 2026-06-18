@@ -115,6 +115,16 @@ export default function MapaZonas({
     return acc
   }, {})
 
+  const revisionActivaPorZona = revisiones.reduce((acc: any, rev: any) => {
+    const zid = rev.zona_id
+    if (!zid) return acc
+    const current = acc[zid]
+    if (!current || Number(rev.seconds_remaining || 0) < Number(current.seconds_remaining || 0)) {
+      acc[zid] = rev
+    }
+    return acc
+  }, {})
+
   return (
     <div className="map-container">
       <div className="city-board-glow" />
@@ -201,6 +211,10 @@ export default function MapaZonas({
           const incCount = incidentesPorZona[z.id] || 0
           const senCount = sensoresPorZona[z.id] || 0
           const reviewCount = revisionesPorZona[z.id] || 0
+          const activeReview = revisionActivaPorZona[z.id]
+          const reviewDelay = Number(activeReview?.delay_seconds || 25)
+          const reviewRemaining = Number(activeReview?.seconds_remaining || 0)
+          const reviewRatio = activeReview ? Math.max(0, Math.min(1, reviewRemaining / Math.max(1, reviewDelay))) : 0
           const confidence = confidenceByZone[String(z.id)]?.average ?? 0
           const pressure = pressureByZone[String(z.id)]?.score ?? 0
           const color = mapLayer === 'confidence'
@@ -219,6 +233,19 @@ export default function MapaZonas({
               <circle cx={z.x} cy={z.y} r={isSelected ? 44 : 36} fill={color} fillOpacity={isSelected ? 0.16 : 0.05} />
               {mapLayer === 'pressure' && pressure > 0 && <circle cx={z.x} cy={z.y} r={34 + pressure / 7} fill={color} fillOpacity={Math.min(0.18, pressure / 520)} />}
               {mapLayer === 'confidence' && confidence > 0 && <circle cx={z.x} cy={z.y} r={30} fill="none" stroke={color} strokeWidth="3" strokeOpacity={0.18 + confidence / 180} />}
+              {activeReview && (
+                <circle
+                  className="operator-countdown-bubble"
+                  cx={z.x}
+                  cy={z.y}
+                  r={12 + reviewRatio * 34}
+                  fill="var(--accent-emerald)"
+                  fillOpacity={0.08 + reviewRatio * 0.12}
+                  stroke="var(--accent-emerald)"
+                  strokeWidth="2"
+                  strokeOpacity={0.35 + reviewRatio * 0.45}
+                />
+              )}
               {isHot && <circle className="zone-alert-ring" cx={z.x} cy={z.y} r="38" fill="none" stroke={color} />}
               {reviewCount > 0 && <circle className="zone-review-ring" cx={z.x} cy={z.y} r="45" fill="none" stroke="var(--accent-cyan)" />}
               <polygon

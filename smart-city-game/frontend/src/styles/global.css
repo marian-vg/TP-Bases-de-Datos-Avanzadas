@@ -1536,3 +1536,10 @@ body {
     100% { opacity: 0; transform: translateY(-4px) scale(0.98); filter: blur(2px); }
   }
 }
+
+.operator-countdown-bubble {
+  pointer-events: none;
+  transform-origin: center;
+  transition: r 300ms linear, fill-opacity 300ms linear, stroke-opacity 300ms linear;
+  filter: drop-shadow(0 0 10px rgba(52, 211, 153, 0.22));
+}

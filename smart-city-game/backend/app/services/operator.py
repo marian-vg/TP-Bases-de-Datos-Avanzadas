@@ -76,6 +76,10 @@ def process_pending_reviews_sync():
         # Mismo origen de verdad que el camino inmediato (>80%): el mapeo
         # tipo_evento -> tipo_incidente/gravedad vive en la BD, no en config del juego.
         mapeo = events_repo.get_promocion_mapeo_sync(review["tipo_evento_id"])
+        fallback_accidente = False
+        if not mapeo:
+            mapeo = events_repo.get_accidente_fallback_mapeo_sync()
+            fallback_accidente = True
 
         if mapeo:
             sim = clock.sim_now()
@@ -86,12 +90,20 @@ def process_pending_reviews_sync():
                     gravedad_id=mapeo["gravedad_id"],
                     zona_id=review["zona_id"],
                     sim_now=sim,
-                    descripcion=f"Operador confirma incidente por evento {evento_id}",
+                    descripcion=(
+                        f"Operador acredita accidente por evento {evento_id}"
+                        if fallback_accidente
+                        else f"Operador confirma incidente por evento {evento_id}"
+                    ),
                 )
                 game_feed.add(
                     kind="operator",
-                    title="Operador confirma incidente",
-                    message=f"El evento {evento_id} fue validado y se registró como incidente {incidente_id}.",
+                    title="Operador acredita accidente" if fallback_accidente else "Operador confirma incidente",
+                    message=(
+                        f"El evento {evento_id} fue validado como accidente {incidente_id}."
+                        if fallback_accidente
+                        else f"El evento {evento_id} fue validado y se registró como incidente {incidente_id}."
+                    ),
                     zona_id=review["zona_id"],
                     severity="danger",
                     dedupe_key=f"review-promoted:{evento_id}",
@@ -101,14 +113,6 @@ def process_pending_reviews_sync():
             except Exception as e:
                 results.append({"evento_id": evento_id, "error": str(e), "status": "failed"})
         else:
-            game_feed.add(
-                kind="operator",
-                title="Operador descarta señal",
-                message=f"El evento {evento_id} no tiene mapeo único de incidente.",
-                zona_id=review["zona_id"],
-                severity="info",
-                dedupe_key=f"review-discard:{evento_id}",
-            )
-            results.append({"evento_id": evento_id, "status": "no_mapping"})
+            results.append({"evento_id": evento_id, "status": "failed_no_fallback"})
 
     return results

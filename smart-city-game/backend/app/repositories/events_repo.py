@@ -54,6 +54,28 @@ def get_promocion_mapeo_sync(tipo_evento_id: int) -> dict | None:
             return {"tipo_incidente_id": rows[0][0], "gravedad_id": rows[0][1]}
 
 
+
+
+def get_accidente_fallback_mapeo_sync() -> dict:
+    """Fallback exclusivo del juego: si un evento llega a revisión del operador
+    pero la BD no tiene un mapeo único, no modelamos falsos positivos. El
+    operador lo acredita como Accidente de tránsito con gravedad Alta."""
+    pool = get_pool()
+    with pool.connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """SELECT
+                       (SELECT id_tipo_incidente FROM TipoIncidente WHERE nombre ILIKE 'Accidente%' ORDER BY id_tipo_incidente LIMIT 1),
+                       (SELECT id_gravedad FROM Gravedad WHERE nombre ILIKE 'Alta' ORDER BY id_gravedad LIMIT 1);"""
+            )
+            row = cur.fetchone()
+            return {
+                "tipo_incidente_id": row[0] if row and row[0] is not None else 1,
+                "gravedad_id": row[1] if row and row[1] is not None else 3,
+                "fallback": True,
+            }
+
+
 def find_incidente_by_evento_sync(evento_id: int) -> dict | None:
     pool = get_pool()
     with pool.connection() as conn:
