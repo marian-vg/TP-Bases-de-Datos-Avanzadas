@@ -18,31 +18,38 @@ def schedule_trip(
     late_chance = 0.10 if same_zone else 0.50
     is_late = random.random() < late_chance
 
+    scale = clock.get_scale()
     sla = sla_minutos if sla_minutos and sla_minutos > 0 else 5
 
-    # Duracion del viaje EN TIEMPO SIMULADO, relativa al SLA del incidente:
-    #  - is_late: supera el SLA -> la BD (sp_CalcularPenalizacion) penaliza.
-    #  - en hora: queda dentro del SLA -> sin penalizacion.
-    if is_late:
-        viaje = timedelta(minutes=sla + random.uniform(1.0, sla))
+    # 1) Calcular duración de viaje en SEGUNDOS REALES de reloj de pared
+    if same_zone:
+        viaje_real_segundos = random.uniform(2.0, 4.0)
     else:
-        viaje = timedelta(minutes=random.uniform(0.2, max(0.5, sla * 0.7)))
+        if is_late:
+            # Supera el SLA del incidente para que la BD calcule la penalización proporcional (P4)
+            # SLA real en segundos = (SLA_minutos * 60) / escala
+            sla_real_segundos = (sla * 60.0) / scale
+            viaje_real_segundos = sla_real_segundos + random.uniform(2.0, 8.0)
+        else:
+            viaje_real_segundos = random.uniform(5.0, 10.0)
 
-    # Duración de la atención según gravedad (mínimo 15s reales = 5 min simulados a escala 20x)
+    viaje = timedelta(seconds=viaje_real_segundos * scale)
+
+    # 2) Calcular duración de la atención en SEGUNDOS REALES (mínimo 5s, máximo 30s)
     if gravedad_id == 1:
-        atencion_minutos = random.uniform(5.0, 6.0)
+        atencion_real_segundos = random.uniform(5.0, 7.0)
     elif gravedad_id == 2:
-        atencion_minutos = random.uniform(7.0, 8.0)
+        atencion_real_segundos = random.uniform(8.0, 12.0)
     elif gravedad_id == 3:
-        atencion_minutos = random.uniform(9.0, 10.0)
+        atencion_real_segundos = random.uniform(13.0, 18.0)
     elif gravedad_id == 4:
-        atencion_minutos = random.uniform(11.0, 13.0)
+        atencion_real_segundos = random.uniform(19.0, 24.0)
     elif gravedad_id == 5:
-        atencion_minutos = random.uniform(15.0, 18.0)
+        atencion_real_segundos = random.uniform(25.0, 30.0)
     else:
-        atencion_minutos = random.uniform(5.0, 10.0)
+        atencion_real_segundos = random.uniform(5.0, 15.0)
 
-    atencion = timedelta(minutes=atencion_minutos)
+    atencion = timedelta(seconds=atencion_real_segundos * scale)
 
     # Valor ESCRITO en la BD: anclado a timestamp_asignacion (reloj real de la BD,
     # CURRENT_TIMESTAMP). Asi (timestamp_llegada - timestamp_asignacion) == viaje y
