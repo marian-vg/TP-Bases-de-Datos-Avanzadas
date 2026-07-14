@@ -93,6 +93,16 @@ export default function ToastContainer({ state }: ToastContainerProps) {
     if (!message) return ''
     let html = message
 
+    // 0) Reemplazar zona ID numérico por su nombre descriptivo
+    if (state?.zonas) {
+      const zoneRegex = /\bzona\s*:?\s*(\d+)\b/gi
+      html = html.replace(zoneRegex, (match, zoneIdStr) => {
+        const zoneId = parseInt(zoneIdStr, 10)
+        const zoneObj = state.zonas.find((z: any) => z.id_zona === zoneId)
+        return zoneObj ? `zona ${zoneObj.nombre}` : match
+      })
+    }
+
     // 1) Resaltar zonas
     if (state?.zonas) {
       state.zonas.forEach((z: any) => {

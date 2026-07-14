@@ -1,6 +1,6 @@
 import { useState, useCallback } from 'react'
 import { AlertTriangle } from 'lucide-react'
-import { fetchState } from './api/client'
+import { fetchState, togglePause } from './api/client'
 import { usePolling } from './api/polling'
 import MapaZonas from './components/MapaZonas'
 import Hotbar from './components/Hotbar'
@@ -25,6 +25,30 @@ function App() {
   const [tutorialActive, setTutorialActive] = useState<boolean>(() => {
     return localStorage.getItem('smartcity_tutorial_completed') !== 'true'
   })
+  const [pausedByTutorial, setPausedByTutorial] = useState(false)
+
+  const handlePauseFromTutorial = useCallback(async (shouldPause: boolean) => {
+    const isCurrentlyPaused = state?.reloj?.paused ?? state?.paused ?? state?.simulationPaused ?? false
+    if (shouldPause) {
+      if (!isCurrentlyPaused) {
+        try {
+          await togglePause()
+          setPausedByTutorial(true)
+        } catch (e) {
+          console.error("Error al pausar por tutorial:", e)
+        }
+      }
+    } else {
+      if (pausedByTutorial) {
+        try {
+          await togglePause()
+          setPausedByTutorial(false)
+        } catch (e) {
+          console.error("Error al reanudar por tutorial:", e)
+        }
+      }
+    }
+  }, [state, pausedByTutorial])
 
   const load = useCallback(async () => {
     try {
@@ -131,6 +155,7 @@ function App() {
           selectedCatastrophe={selectedCatastrophe}
           selectedZoneId={selectedZoneId}
           onClose={() => setTutorialActive(false)}
+          onPauseGame={handlePauseFromTutorial}
         />
       )}
     </div>

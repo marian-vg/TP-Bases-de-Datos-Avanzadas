@@ -2010,3 +2010,25 @@ body {
   background: rgba(34, 211, 238, 0.05);
   border-color: rgba(34, 211, 238, 0.2);
 }
+
+/* Botón de cierre superior derecho de los tooltips del tutorial */
+.tutorial-tooltip-close {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  background: none;
+  border: none;
+  color: var(--hud-text-muted);
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+}
+
+.tutorial-tooltip-close:hover {
+  color: var(--accent-red);
+  background: rgba(248, 113, 113, 0.08);
+}

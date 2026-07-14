@@ -1,13 +1,14 @@
 import { useState, useEffect } from 'react'
-import { Sparkles, ChevronRight, Check } from 'lucide-react'
+import { Sparkles, ChevronRight, Check, X } from 'lucide-react'
 
 type TutorialOverlayProps = {
   selectedCatastrophe: string | null
   selectedZoneId: number | null
   onClose: () => void
+  onPauseGame?: (shouldPause: boolean) => void
 }
 
-export default function TutorialOverlay({ selectedCatastrophe, selectedZoneId, onClose }: TutorialOverlayProps) {
+export default function TutorialOverlay({ selectedCatastrophe, selectedZoneId, onClose, onPauseGame }: TutorialOverlayProps) {
   const [step, setStep] = useState<number>(0)
 
   // Avanzar contextualmente del Paso 1 al Paso 2 cuando se arma una catástrofe
@@ -21,11 +22,24 @@ export default function TutorialOverlay({ selectedCatastrophe, selectedZoneId, o
   useEffect(() => {
     if (step === 2 && selectedZoneId !== null) {
       setStep(3)
+      if (onPauseGame) {
+        onPauseGame(true)
+      }
     }
-  }, [selectedZoneId, step])
+  }, [selectedZoneId, step, onPauseGame])
 
   const finishTutorial = () => {
     localStorage.setItem('smartcity_tutorial_completed', 'true')
+    if (onPauseGame) {
+      onPauseGame(false)
+    }
+    onClose()
+  }
+
+  const handleClose = () => {
+    if (onPauseGame) {
+      onPauseGame(false)
+    }
     onClose()
   }
 
@@ -73,7 +87,7 @@ export default function TutorialOverlay({ selectedCatastrophe, selectedZoneId, o
             </p>
           </div>
           <div className="tutorial-modal-footer">
-            <button className="sim-btn" onClick={onClose} style={{ opacity: 0.7 }} type="button">Saltar</button>
+            <button className="sim-btn" onClick={handleClose} style={{ opacity: 0.7 }} type="button">Saltar</button>
             <button className="sim-btn sim-btn--primary" onClick={() => setStep(1)} style={{ gap: 4 }} type="button">
               Comenzar Guía <ChevronRight size={12} />
             </button>
@@ -87,6 +101,9 @@ export default function TutorialOverlay({ selectedCatastrophe, selectedZoneId, o
     <>
       {step === 1 && (
         <div className="tutorial-tooltip tutorial-tooltip--hotbar">
+          <button className="tutorial-tooltip-close" onClick={handleClose} type="button" title="Cerrar tutorial">
+            <X size={14} />
+          </button>
           <div className="tutorial-tooltip-step">Paso 1 de 3</div>
           <div className="tutorial-tooltip-title">Seleccioná una Catástrofe</div>
           <div className="tutorial-tooltip-msg">
@@ -97,13 +114,13 @@ export default function TutorialOverlay({ selectedCatastrophe, selectedZoneId, o
 
       {step === 2 && (
         <div className="tutorial-tooltip tutorial-tooltip--map">
+          <button className="tutorial-tooltip-close" onClick={handleClose} type="button" title="Cerrar tutorial">
+            <X size={14} />
+          </button>
           <div className="tutorial-tooltip-step">Paso 2 de 3</div>
           <div className="tutorial-tooltip-title">Inyectá en el Mapa</div>
           <div className="tutorial-tooltip-msg">
             ¡Perfecto! Tenés la catástrofe armada. Ahora <strong>hacé click sobre cualquier zona del mapa</strong> (los nodos con círculos) para inyectar el evento y desatar la respuesta.
-          </div>
-          <div className="tutorial-tooltip-footer">
-            <button className="sim-btn" onClick={() => setStep(1)} style={{ fontSize: 10, padding: '4px 10px' }} type="button">Atrás</button>
           </div>
         </div>
       )}
