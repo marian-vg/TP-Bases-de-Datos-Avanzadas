@@ -1815,13 +1815,13 @@ body {
   top: 50%;
   left: 50%;
   transform: translate(-50%, -50%);
-  background: rgba(15, 23, 42, 0.95);
+  background: rgba(15, 23, 42, 0.96);
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 12px;
-  width: 440px;
-  padding: 24px;
+  width: 480px;
+  padding: 28px;
   box-shadow: 0 20px 50px -15px rgba(0, 0, 0, 0.7), 0 0 30px rgba(56, 189, 248, 0.15);
   z-index: 9991;
   display: flex;
@@ -1853,22 +1853,22 @@ body {
 
 .tutorial-modal-title {
   color: var(--hud-text);
-  font-size: 16px;
+  font-size: 18px;
   font-weight: 800;
   letter-spacing: -0.02em;
 }
 
 .tutorial-modal-body {
   color: var(--hud-text-muted);
-  font-size: 12px;
-  line-height: 1.5;
+  font-size: 13.5px;
+  line-height: 1.6;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 12px;
 }
 
 .tutorial-modal-body strong {
-  color: var(--hud-text);
+  color: var(--accent-cyan);
 }
 
 .tutorial-modal-footer {
@@ -1881,18 +1881,18 @@ body {
 /* Tooltips de paso */
 .tutorial-tooltip {
   position: fixed;
-  background: rgba(15, 23, 42, 0.94);
+  background: rgba(15, 23, 42, 0.96);
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 8px;
-  box-shadow: 0 15px 40px -10px rgba(0, 0, 0, 0.6), 0 0 20px rgba(34, 211, 238, 0.1);
-  padding: 14px 16px;
-  width: 280px;
-  z-index: 9992;
+  box-shadow: 0 20px 50px -10px rgba(0, 0, 0, 0.7), 0 0 25px rgba(34, 211, 238, 0.15);
+  padding: 20px 24px;
+  width: 380px;
+  z-index: 99995 !important;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 10px;
   pointer-events: auto;
   transition: all 0.35s cubic-bezier(0.16, 1, 0.3, 1);
   animation: tooltipFadeIn 0.3s ease forwards;
@@ -1905,7 +1905,7 @@ body {
 
 .tutorial-tooltip-step {
   font-family: var(--font-mono);
-  font-size: 9px;
+  font-size: 10px;
   font-weight: 700;
   color: var(--accent-cyan);
   text-transform: uppercase;
@@ -1914,15 +1914,15 @@ body {
 
 .tutorial-tooltip-title {
   color: var(--hud-text);
-  font-size: 13px;
-  font-weight: 700;
+  font-size: 16px;
+  font-weight: 800;
   line-height: 1.2;
 }
 
 .tutorial-tooltip-msg {
   color: var(--hud-text-muted);
-  font-size: 11px;
-  line-height: 1.4;
+  font-size: 13px;
+  line-height: 1.5;
 }
 
 .tutorial-tooltip-msg strong {
@@ -1944,7 +1944,7 @@ body {
 
 /* Posiciones contextuales de tooltips */
 .tutorial-tooltip--hotbar {
-  bottom: 94px;
+  bottom: 110px;
   left: 50%;
   transform: translateX(-50%);
 }
@@ -1952,7 +1952,7 @@ body {
   bottom: -12px;
   left: 50%;
   transform: translateX(-50%);
-  border-top-color: rgba(15, 23, 42, 0.94);
+  border-top-color: rgba(15, 23, 42, 0.96);
 }
 
 .tutorial-tooltip--map {
@@ -1963,17 +1963,17 @@ body {
   left: -12px;
   top: 50%;
   transform: translateY(-50%);
-  border-right-color: rgba(15, 23, 42, 0.94);
+  border-right-color: rgba(15, 23, 42, 0.96);
 }
 
 .tutorial-tooltip--sidebar {
   top: 180px;
-  right: 420px;
+  right: 440px;
 }
 .tutorial-tooltip--sidebar::after {
   right: -12px;
   top: 40px;
-  border-left-color: rgba(15, 23, 42, 0.94);
+  border-left-color: rgba(15, 23, 42, 0.96);
 }
 
 /* Foco visual por overlays */
@@ -1982,6 +1982,10 @@ body {
   z-index: 9993 !important;
   box-shadow: 0 0 0 9999px rgba(8, 12, 20, 0.65), 0 0 25px rgba(56, 189, 248, 0.35) !important;
   pointer-events: auto !important;
+}
+
+.game-main:has(.tutorial-highlight-focus) {
+  z-index: 9993 !important;
 }
 
 /* Botón de ayuda en la topbar */

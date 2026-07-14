@@ -62,15 +62,13 @@ export default function TutorialOverlay({ selectedCatastrophe, selectedZoneId, o
           </div>
           <div className="tutorial-modal-body">
             <p>
-              Estás en el centro de control del simulador de Smart City. Este juego está conectado de forma activa a
-              una <strong>base de datos SQL</strong> que procesa triggers, procedimientos y lógica de contingencias en tiempo real.
+              Este es un juego que aprovecha la <strong>base de datos activa</strong> desarrollada para Smart City, el cual permite evaluar cómo funciona la base de datos en tiempo real.
             </p>
             <p>
-              Como "Director del Caos", tu objetivo es simular catástrofes y ver cómo el despachador inteligente y los 
-              recursos (Bomberos, Policías, Ambulancias) se coordinan para resolverlas.
+              Como <strong>"Director del Caos"</strong>, tu objetivo es simular catástrofes y ver cómo el despachador inteligente y los recursos (Bomberos, Policías, Ambulancias) se coordinan para resolverlas.
             </p>
             <p>
-              Hagamos una guía rápida de 3 pasos para entender cómo operar los tableros.
+              Hagamos una guía rápida de <strong>3 pasos</strong> para entender cómo operar los tableros.
             </p>
           </div>
           <div className="tutorial-modal-footer">
@@ -93,9 +91,6 @@ export default function TutorialOverlay({ selectedCatastrophe, selectedZoneId, o
           <div className="tutorial-tooltip-msg">
             Hacé click en cualquiera de las catástrofes de abajo para armar tu ataque. Por ejemplo, hacé click en <strong>Incendio</strong> o <strong>Falla Estructural</strong>.
           </div>
-          <div className="tutorial-tooltip-footer">
-            <button className="sim-btn" onClick={onClose} style={{ fontSize: 9, padding: '3px 8px' }} type="button">Saltar guía</button>
-          </div>
         </div>
       )}
 
@@ -107,8 +102,7 @@ export default function TutorialOverlay({ selectedCatastrophe, selectedZoneId, o
             ¡Perfecto! Tenés la catástrofe armada. Ahora <strong>hacé click sobre cualquier zona del mapa</strong> (los nodos con círculos) para inyectar el evento y desatar la respuesta.
           </div>
           <div className="tutorial-tooltip-footer">
-            <button className="sim-btn" onClick={() => setStep(1)} style={{ fontSize: 9, padding: '3px 8px', marginRight: 6 }} type="button">Atrás</button>
-            <button className="sim-btn" onClick={onClose} style={{ fontSize: 9, padding: '3px 8px' }} type="button">Saltar guía</button>
+            <button className="sim-btn" onClick={() => setStep(1)} style={{ fontSize: 10, padding: '4px 10px' }} type="button">Atrás</button>
           </div>
         </div>
       )}
