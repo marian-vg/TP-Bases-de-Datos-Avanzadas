@@ -723,27 +723,27 @@ body {
 }
 
 .badge-severity--low {
-  background: rgba(52, 211, 153, 0.12);
-  color: var(--accent-emerald);
-  border: 1px solid rgba(52, 211, 153, 0.2);
-}
-
-.badge-severity--medium {
   background: rgba(251, 191, 36, 0.12);
   color: var(--accent-amber);
   border: 1px solid rgba(251, 191, 36, 0.2);
 }
 
-.badge-severity--high {
+.badge-severity--medium {
   background: rgba(251, 146, 60, 0.12);
   color: var(--risk-high);
   border: 1px solid rgba(251, 146, 60, 0.2);
 }
 
-.badge-severity--critical {
+.badge-severity--high {
   background: rgba(248, 113, 113, 0.12);
   color: var(--accent-red);
   border: 1px solid rgba(248, 113, 113, 0.2);
+}
+
+.badge-severity--critical {
+  background: rgba(167, 139, 250, 0.12);
+  color: var(--accent-violet);
+  border: 1px solid rgba(167, 139, 250, 0.2);
 }
 
 .badge-status {
@@ -1032,6 +1032,8 @@ body {
   stroke: rgba(56, 189, 248, 0.42);
   stroke-width: 1.5;
   pointer-events: none;
+  transform-origin: center;
+  transform-box: fill-box;
   animation: resourcePulse 1.4s cubic-bezier(0.23, 1, 0.32, 1) infinite;
 }
 
@@ -1542,4 +1544,254 @@ body {
   transform-origin: center;
   transition: r 300ms linear, fill-opacity 300ms linear, stroke-opacity 300ms linear;
   filter: drop-shadow(0 0 10px rgba(52, 211, 153, 0.22));
+}
+
+/* ── Sistema de Notificaciones Toast Apiladas ── */
+.toasts-wrapper {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  z-index: 9999;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  pointer-events: none;
+  max-width: 380px;
+  width: 100%;
+}
+
+.toast-item {
+  pointer-events: auto;
+  background: rgba(15, 23, 42, 0.78);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-left: 4px solid var(--accent-cyan);
+  border-radius: 6px;
+  padding: 12px 16px;
+  box-shadow: 0 10px 30px -5px rgba(0, 0, 0, 0.5);
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  animation: toastSlideIn 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  transition: all 0.3s ease;
+}
+
+.toast-item.toast-item--exit {
+  animation: toastSlideOut 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes toastSlideIn {
+  from {
+    opacity: 0;
+    transform: translateX(40px) translateY(10px);
+    filter: blur(2px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0) translateY(0);
+    filter: blur(0);
+  }
+}
+
+@keyframes toastSlideOut {
+  from {
+    opacity: 1;
+    transform: translateX(0);
+    filter: blur(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateX(60px) translateY(-10px);
+    filter: blur(2px);
+  }
+}
+
+/* Severidades de Toast */
+.toast-item--info {
+  border-left-color: var(--accent-cyan);
+}
+.toast-item--warning {
+  border-left-color: var(--accent-amber);
+}
+.toast-item--success {
+  border-left-color: var(--accent-emerald);
+}
+.toast-item--danger {
+  border-left-color: var(--accent-red);
+}
+
+.toast-icon {
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+.toast-item--info .toast-icon { color: var(--accent-cyan); }
+.toast-item--warning .toast-icon { color: var(--accent-amber); }
+.toast-item--success .toast-icon { color: var(--accent-emerald); }
+.toast-item--danger .toast-icon { color: var(--accent-red); }
+
+.toast-content {
+  flex-grow: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.toast-title {
+  color: var(--hud-text);
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.toast-msg {
+  color: var(--hud-text-muted);
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.toast-close-btn {
+  background: none;
+  border: none;
+  color: var(--hud-text-muted);
+  cursor: pointer;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0.5;
+  transition: opacity 0.2s ease;
+  margin-top: 2px;
+}
+
+.toast-close-btn:hover {
+  opacity: 1;
+  color: var(--hud-text);
+}
+
+/* Estilos de Resaltado de Entidades */
+.toast-highlight {
+  font-weight: 600;
+  padding: 1px 4px;
+  border-radius: 3px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+}
+
+.toast-highlight--zone {
+  color: var(--accent-cyan);
+  background: rgba(34, 211, 238, 0.08);
+  border: 1px dashed rgba(34, 211, 238, 0.25);
+}
+
+.toast-highlight--resource {
+  color: var(--accent-emerald);
+  background: rgba(52, 211, 153, 0.08);
+  border: 1px dashed rgba(52, 211, 153, 0.25);
+}
+
+.toast-highlight--incident {
+  color: var(--accent-red);
+  background: rgba(248, 113, 113, 0.08);
+  border: 1px dashed rgba(248, 113, 113, 0.25);
+}
+
+/* ── Dropdown de Controles de Simulación ── */
+.sim-menu-container {
+  position: relative;
+}
+
+.sim-menu-trigger {
+  display: flex;
+  align-items: center;
+  gap: 6px !important;
+}
+
+.sim-menu-trigger .chevron {
+  transition: transform 0.2s ease;
+}
+
+.sim-menu-trigger .chevron.open {
+  transform: rotate(180deg);
+}
+
+.sim-dropdown-menu {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  right: 0;
+  background: rgba(15, 23, 42, 0.92);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  box-shadow: 0 15px 40px -10px rgba(0, 0, 0, 0.6);
+  width: 320px;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  z-index: 1000;
+  animation: dropdownFadeIn 0.2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes dropdownFadeIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.sim-dropdown-item {
+  display: flex;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.2s ease, transform 0.1s ease;
+  align-items: flex-start;
+}
+
+.sim-dropdown-item:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.sim-dropdown-item:active {
+  transform: scale(0.98);
+}
+
+.sim-dropdown-item .item-icon {
+  flex-shrink: 0;
+  margin-top: 3px;
+  color: var(--accent-cyan);
+}
+
+.sim-dropdown-item--danger .item-icon {
+  color: var(--accent-red);
+}
+
+.sim-dropdown-item--success .item-icon {
+  color: var(--accent-emerald);
+}
+
+.sim-dropdown-item .item-details {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.sim-dropdown-item .item-title {
+  color: var(--hud-text);
+  font-size: 11px;
+  font-weight: 700;
+  font-family: var(--font-mono);
+}
+
+.sim-dropdown-item .item-desc {
+  color: var(--hud-text-muted);
+  font-size: 9px;
+  line-height: 1.3;
+}
+
+.sim-dropdown-divider {
+  height: 1px;
+  background: rgba(255, 255, 255, 0.06);
+  margin: 4px 0;
 }

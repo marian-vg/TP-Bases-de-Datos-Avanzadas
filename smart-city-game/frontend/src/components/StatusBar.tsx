@@ -1,14 +1,27 @@
-import { useState } from 'react'
-import { Eye, Gauge, Pause, Play, Radio, RefreshCcw, ShieldCheck, Siren, TimerReset, Zap, Clock3, CircleDot } from 'lucide-react'
+import { useState, useRef, useEffect } from 'react'
+import { Eye, Gauge, Pause, Play, Radio, RefreshCcw, ShieldCheck, Siren, TimerReset, Zap, Clock3, CircleDot, ChevronDown, Settings } from 'lucide-react'
 import { tickSimulation, togglePause, setAuto, stormMode, escalateOverdue, reactivateResources } from '../api/client'
 
 export default function StatusBar({ state, mapLayer, onMapLayerChange }: { state: any; mapLayer: 'incidents' | 'confidence' | 'pressure'; onMapLayerChange: (layer: 'incidents' | 'confidence' | 'pressure') => void }) {
   const [working, setWorking] = useState<string | null>(null)
   const [feedback, setFeedback] = useState<string | null>(null)
+  const [menuOpen, setMenuOpen] = useState(false)
+  const menuRef = useRef<HTMLDivElement>(null)
 
   const simClock = state?.reloj?.simNow || state?.simNow || state?.simClock || state?.simulationTime || '-'
   const paused = state?.reloj?.paused ?? state?.paused ?? state?.simulationPaused ?? false
   const auto = state?.scheduler?.auto ?? state?.auto ?? state?.autoEnabled ?? false
+
+  // Cerrar al hacer click afuera
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
+        setMenuOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [])
 
   const run = async (label: string, fn: () => Promise<any>) => {
     setWorking(label)
@@ -36,12 +49,12 @@ export default function StatusBar({ state, mapLayer, onMapLayerChange }: { state
       }}>
         <CircleDot size={10} /> {paused ? 'Pausado' : 'Activo'}
       </span>
-      <span className="status-badge" title="Modo automático: la ciudad procesa ticks sin intervención manual" style={{
+      <span className="status-badge" title="Inyección automática: la simulación inyecta catástrofes aleatorias de forma autónoma" style={{
         background: auto ? 'rgba(56,189,248,0.1)' : 'rgba(74,85,104,0.2)',
         color: auto ? 'var(--accent-cyan)' : 'var(--hud-text-muted)',
         border: `1px solid ${auto ? 'rgba(56,189,248,0.25)' : 'rgba(74,85,104,0.3)'}`,
       }}>
-        {auto ? 'Auto' : 'Manual'}
+        {auto ? 'Inyección Auto: ON' : 'Inyección Auto: OFF'}
       </span>
 
       <div className="status-divider" />
@@ -54,30 +67,108 @@ export default function StatusBar({ state, mapLayer, onMapLayerChange }: { state
 
       <div className="status-divider" />
 
-      <button className="sim-btn" title="Procesa un ciclo de reglas: llegadas, finales, revisiones y automatizaciones" onClick={() => run('Tick', tickSimulation)} disabled={!!working}>
-        <Zap size={12} />
-        {working === 'Tick' ? '...' : 'Tick'}
-      </button>
-      <button className="sim-btn sim-btn--danger" title="Genera una ráfaga de 20 eventos para estresar la ciudad" onClick={() => run('Storm', () => stormMode(20))} disabled={!!working}>
-        <Siren size={12} />
-        {working === 'Storm' ? '...' : 'Storm 20'}
-      </button>
-      <button className="sim-btn" title="Fuerza la evaluación de incidentes vencidos y escalamiento" onClick={() => run('Escalar', escalateOverdue)} disabled={!!working}>
-        <TimerReset size={12} />
-        {working === 'Escalar' ? '...' : 'Escalar'}
-      </button>
-      <button className="sim-btn sim-btn--success" title="Reactiva recursos que ya cumplieron su ventana de inhabilitación" onClick={() => run('Reactivar', reactivateResources)} disabled={!!working}>
-        <RefreshCcw size={12} />
-        {working === 'Reactivar' ? '...' : 'Reactivar'}
-      </button>
-      <button className="sim-btn" title="Pausa o reanuda el reloj de simulación" onClick={() => run('Pausa', togglePause)} disabled={!!working}>
-        {paused ? <Play size={12} /> : <Pause size={12} />}
-        {working === 'Pausa' ? '...' : paused ? 'Play' : 'Pausa'}
-      </button>
-      <button className="sim-btn sim-btn--primary" title="Activa o desactiva el procesamiento automático de la ciudad" onClick={() => run('Auto', () => setAuto(!auto))} disabled={!!working}>
-        <Radio size={12} />
-        {working === 'Auto' ? '...' : auto ? 'Auto OFF' : 'Auto ON'}
-      </button>
+      {/* Menú Dropdown de Controles de Simulación */}
+      <div className="sim-menu-container" ref={menuRef}>
+        <button
+          className={`sim-btn sim-btn--primary sim-menu-trigger ${menuOpen ? 'active' : ''}`}
+          onClick={() => setMenuOpen(!menuOpen)}
+          type="button"
+        >
+          <Settings size={12} />
+          <span>Controles de Simulación</span>
+          <ChevronDown size={10} className={`chevron ${menuOpen ? 'open' : ''}`} />
+        </button>
+
+        {menuOpen && (
+          <div className="sim-dropdown-menu">
+            {/* Play / Pausa */}
+            <button
+              type="button"
+              className="sim-dropdown-item"
+              onClick={() => { run('Pausa', togglePause); setMenuOpen(false); }}
+              disabled={!!working}
+            >
+              <div className="item-icon">{paused ? <Play size={13} /> : <Pause size={13} />}</div>
+              <div className="item-details">
+                <div className="item-title">{paused ? 'Reanudar Reloj (Play)' : 'Pausar Reloj (Pausa)'}</div>
+                <div className="item-desc">Detiene o reanuda el avance del tiempo simulado de la ciudad.</div>
+              </div>
+            </button>
+
+            {/* Activar/Desactivar Inyección Auto */}
+            <button
+              type="button"
+              className="sim-dropdown-item"
+              onClick={() => { run('Auto', () => setAuto(!auto)); setMenuOpen(false); }}
+              disabled={!!working}
+            >
+              <div className="item-icon"><Radio size={13} /></div>
+              <div className="item-details">
+                <div className="item-title">{auto ? 'Desactivar Inyección Auto' : 'Activar Inyección Auto'}</div>
+                <div className="item-desc">El sistema inyecta catástrofes aleatorias automáticamente cada 15s.</div>
+              </div>
+            </button>
+
+            <div className="sim-dropdown-divider" />
+
+            {/* Tick */}
+            <button
+              type="button"
+              className="sim-dropdown-item"
+              onClick={() => { run('Tick', tickSimulation); setMenuOpen(false); }}
+              disabled={!!working}
+            >
+              <div className="item-icon"><Zap size={13} /></div>
+              <div className="item-details">
+                <div className="item-title">Procesar Tick (Simular Paso)</div>
+                <div className="item-desc">Fuerza el procesamiento de un ciclo manual (viajes, arribos y revisiones).</div>
+              </div>
+            </button>
+
+            {/* Storm 20 */}
+            <button
+              type="button"
+              className="sim-dropdown-item sim-dropdown-item--danger"
+              onClick={() => { run('Storm', () => stormMode(20)); setMenuOpen(false); }}
+              disabled={!!working}
+            >
+              <div className="item-icon"><Siren size={13} /></div>
+              <div className="item-details">
+                <div className="item-title">Inyectar Tormenta (Storm 20)</div>
+                <div className="item-desc">Provoca una ráfaga masiva de 20 catástrofes para estresar la red.</div>
+              </div>
+            </button>
+
+            {/* Escalar */}
+            <button
+              type="button"
+              className="sim-dropdown-item"
+              onClick={() => { run('Escalar', escalateOverdue); setMenuOpen(false); }}
+              disabled={!!working}
+            >
+              <div className="item-icon"><TimerReset size={13} /></div>
+              <div className="item-details">
+                <div className="item-title">Forzar Escalamiento de SLA</div>
+                <div className="item-desc">Ejecuta sp_EscalarIncidente: sube la gravedad si superó el tiempo límite.</div>
+              </div>
+            </button>
+
+            {/* Reactivar */}
+            <button
+              type="button"
+              className="sim-dropdown-item sim-dropdown-item--success"
+              onClick={() => { run('Reactivar', reactivateResources); setMenuOpen(false); }}
+              disabled={!!working}
+            >
+              <div className="item-icon"><RefreshCcw size={13} /></div>
+              <div className="item-details">
+                <div className="item-title">Reactivar Recursos (sp_Reactivar)</div>
+                <div className="item-desc">Habilita los recursos suspendidos temporalmente por acumular penalizaciones.</div>
+              </div>
+            </button>
+          </div>
+        )}
+      </div>
 
       {feedback && (
         <>

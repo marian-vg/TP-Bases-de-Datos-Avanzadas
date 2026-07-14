@@ -108,14 +108,12 @@
 -- el dataset reproducible para todo el equipo (misma base en cada carga).
 SELECT setseed(0.42);
 
--- Instalación: en algún momento dentro de los últimos ~5 años.
-UPDATE Sensor SET fecha_instalado = CURRENT_DATE - (random() * 1825)::int;
+-- Instalación: reciente, en algún momento dentro de las últimas 5 semanas.
+UPDATE Sensor SET fecha_instalado = CURRENT_DATE - (random() * 35)::int;
 
--- ~40% de los sensores tiene al menos un mantenimiento, dentro de las últimas ~12
--- semanas (GREATEST evita que sea anterior a la instalación). Así siempre hay
--- sensores de alta confianza capaces de generar incidentes.
+-- Todos los sensores tienen un mantenimiento reciente (dentro de las últimas 4 semanas, max 28 días)
+-- Esto garantiza que arranquen con confianza alta (entre 80% y 100%) para dejar margen operativo.
 INSERT INTO MantenimientoSensor (fk_sensor_id, fecha)
-SELECT id_sensor, GREATEST(fecha_instalado, CURRENT_DATE - (random() * 84)::int)
+SELECT id_sensor, CURRENT_DATE - (random() * 28)::int
 FROM Sensor
-WHERE random() < 0.4
 ORDER BY id_sensor;

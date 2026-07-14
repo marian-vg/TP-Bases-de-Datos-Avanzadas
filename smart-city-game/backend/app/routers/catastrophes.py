@@ -43,18 +43,43 @@ async def trigger_catastrophe(req: CatastropheRequest):
         })
 
     sensor = catalogs_repo.find_capable_sensor_sync(req.zoneId, tipos_sensor_ids)
+    
+    _last_used[req.catastropheType] = now
+
     if sensor is None:
+        game_feed.add(
+            kind="attack",
+            title="Reporte ciudadano",
+            message=f"Catástrofe {req.catastropheType.replace('_', ' ')} reportada manualmente por ciudadanos en zona {req.zoneId}.",
+            zona_id=req.zoneId,
+            severity="danger",
+            dedupe_key=f"attack-manual:{req.catastropheType}:{req.zoneId}:{int(now)}",
+            meta={"catastrophe": req.catastropheType},
+        )
+        
+        review_delay = operator.enqueue_operator_review(
+            evento_id=None,
+            zona_id=req.zoneId,
+            tipo_evento_id=info["tipo_evento_id"],
+            sensor_id=None,
+            sensor_nombre=None,
+            tipo_sensor="Reporte telefónico",
+            sensor_confianza=0,
+        )
+        
         return {
             "data": {
                 "eventId": None,
                 "incidentId": None,
                 "coverage": "none",
-                "detectionMode": "none",
+                "detectionMode": "operator_review",
                 "sensorConfidence": 0,
+                "reviewDelaySeconds": review_delay,
+                "sensorName": "Llamado telefónico",
+                "sensorType": "Reporte ciudadano",
             }
         }
 
-    _last_used[req.catastropheType] = now
     game_feed.add(
         kind="attack",
         title="Ataque del jugador",

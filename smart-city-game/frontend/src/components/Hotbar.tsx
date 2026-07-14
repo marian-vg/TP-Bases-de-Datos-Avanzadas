@@ -18,11 +18,11 @@ const ICONS: Record<string, typeof Flame> = {
 }
 
 const GRAVITY_COLORS: Record<number, { bg: string; text: string; border: string }> = {
-  5: { bg: 'rgba(248,113,113,0.12)', text: 'var(--accent-red)', border: 'rgba(248,113,113,0.3)' },
-  4: { bg: 'rgba(251,191,36,0.1)', text: 'var(--accent-amber)', border: 'rgba(251,191,36,0.25)' },
-  3: { bg: 'rgba(56,189,248,0.08)', text: 'var(--accent-cyan)', border: 'rgba(56,189,248,0.2)' },
-  2: { bg: 'rgba(52,211,153,0.08)', text: 'var(--accent-emerald)', border: 'rgba(52,211,153,0.2)' },
-  1: { bg: 'rgba(74,85,104,0.15)', text: 'var(--hud-text-muted)', border: 'rgba(74,85,104,0.3)' },
+  5: { bg: 'rgba(167,139,250,0.12)', text: 'var(--accent-violet)', border: 'rgba(167,139,250,0.3)' },
+  4: { bg: 'rgba(248,113,113,0.12)', text: 'var(--accent-red)', border: 'rgba(248,113,113,0.3)' },
+  3: { bg: 'rgba(251,146,60,0.12)', text: 'var(--risk-high)', border: 'rgba(251,146,60,0.3)' },
+  2: { bg: 'rgba(251,191,36,0.12)', text: 'var(--accent-amber)', border: 'rgba(251,191,36,0.3)' },
+  1: { bg: 'rgba(251,191,36,0.12)', text: 'var(--accent-amber)', border: 'rgba(251,191,36,0.3)' },
 }
 
 function getGravityStyle(g: number) {

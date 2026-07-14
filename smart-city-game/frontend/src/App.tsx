@@ -9,6 +9,7 @@ import GameTopbar from './components/GameTopbar'
 import GameSidebar from './components/GameSidebar'
 import GameDrawer from './components/GameDrawer'
 import ReplayOverlay from './components/ReplayOverlay'
+import ToastContainer from './components/ToastContainer'
 
 function App() {
   const [state, setState] = useState<any>(null)
@@ -116,6 +117,9 @@ function App() {
         onSelectCatastrophe={setSelectedCatastrophe}
         lastTriggered={lastTriggered}
       />
+
+      {/* ── Toast notifications stacked ── */}
+      <ToastContainer state={state} />
     </div>
   )
 }

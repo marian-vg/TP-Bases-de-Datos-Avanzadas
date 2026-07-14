@@ -1,15 +1,17 @@
 import { useState } from 'react'
 import { closeIncident } from '../api/client'
 
-function getGravityStyle(g: number) {
-  if (g >= 5) return 'badge-severity badge-severity--critical'
-  if (g >= 3) return 'badge-severity badge-severity--medium'
-  return 'badge-severity badge-severity--low'
+function getGravityStyle(gravity: string | number) {
+  const name = String(gravity).toLowerCase();
+  if (name === 'catastrófica' || name === 'catastrofica' || gravity === 5) return 'badge-severity badge-severity--critical'; // Violeta
+  if (name === 'crítica' || name === 'critica' || gravity === 4) return 'badge-severity badge-severity--high'; // Rojo
+  if (name === 'alta' || gravity === 3) return 'badge-severity badge-severity--medium'; // Naranja
+  return 'badge-severity badge-severity--low'; // Amarillo (Baja, Moderada)
 }
 
 function selectedZoneName(state: any, selectedZoneId: number | null) {
-  if (!selectedZoneId) return null
-  return state?.zonas?.find((zona: any) => zona.id_zona === selectedZoneId)?.nombre || null
+  if (!selectedZoneId) return null;
+  return state?.zonas?.find((zona: any) => zona.id_zona === selectedZoneId)?.nombre || null;
 }
 
 export default function PanelIncidentes({ state, selectedZoneId }: { state: any; selectedZoneId?: number | null }) {
@@ -44,7 +46,7 @@ export default function PanelIncidentes({ state, selectedZoneId }: { state: any;
       {error && <div className="panel-error">{error}</div>}
       {incidentes.map((inc: any) => {
         const id = inc.id_incidente ?? inc.id
-        const gravedad = Number(inc.gravedad_id ?? inc.gravedad ?? 0)
+        const gravedad = inc.gravedad || inc.gravedad_id || 0
         return (
           <article key={id} className="incident-card">
             <div className="incident-card-topline">

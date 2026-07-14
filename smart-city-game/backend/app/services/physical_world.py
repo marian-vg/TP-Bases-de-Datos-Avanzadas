@@ -12,6 +12,7 @@ def schedule_trip(
     zona_destino: int,
     timestamp_asignacion: datetime,
     sla_minutos: int | None = None,
+    gravedad_id: int = 3,
 ):
     same_zone = zona_origen == zona_destino
     late_chance = 0.10 if same_zone else 0.50
@@ -27,7 +28,21 @@ def schedule_trip(
     else:
         viaje = timedelta(minutes=random.uniform(0.2, max(0.5, sla * 0.7)))
 
-    atencion = timedelta(minutes=random.uniform(0.5, 2.0))
+    # Duración de la atención según gravedad (mínimo 15s reales = 5 min simulados a escala 20x)
+    if gravedad_id == 1:
+        atencion_minutos = random.uniform(5.0, 6.0)
+    elif gravedad_id == 2:
+        atencion_minutos = random.uniform(7.0, 8.0)
+    elif gravedad_id == 3:
+        atencion_minutos = random.uniform(9.0, 10.0)
+    elif gravedad_id == 4:
+        atencion_minutos = random.uniform(11.0, 13.0)
+    elif gravedad_id == 5:
+        atencion_minutos = random.uniform(15.0, 18.0)
+    else:
+        atencion_minutos = random.uniform(5.0, 10.0)
+
+    atencion = timedelta(minutes=atencion_minutos)
 
     # Valor ESCRITO en la BD: anclado a timestamp_asignacion (reloj real de la BD,
     # CURRENT_TIMESTAMP). Asi (timestamp_llegada - timestamp_asignacion) == viaje y

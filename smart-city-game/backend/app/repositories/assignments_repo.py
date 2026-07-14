@@ -67,7 +67,8 @@ def get_open_assignments_without_arrival_sync() -> list[dict]:
                           r.fk_zona_base_id as zona_origen,
                           i.fk_zona_id as zona_destino,
                           r.fk_estado_recurso_id,
-                          sla.tiempo_respuesta_minutos AS sla_minutos
+                          sla.tiempo_respuesta_minutos AS sla_minutos,
+                          i.fk_gravedad_id AS gravedad_id
                    FROM Asignacion a
                    JOIN Recurso r ON a.fk_recurso_id = r.id_recurso
                    JOIN Incidente i ON a.fk_incidente_id = i.id_incidente

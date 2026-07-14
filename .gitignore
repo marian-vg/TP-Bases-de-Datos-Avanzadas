@@ -5,3 +5,7 @@ walkthrough.md
 .agents/
 simulacion/logs/*
 !simulacion/logs/.gitkeep
+
+# Scripts locales de simulación
+start-game.sh
+stop-game.sh

@@ -8,11 +8,33 @@ type MapaZonasProps = {
   state: any
   selectedCatastrophe: string | null
   selectedZoneId: number | null
-  onSelectZone: (zonaId: number) => void
+  onSelectZone: (zonaId: number | null) => void
   mapLayer: 'incidents' | 'confidence' | 'pressure'
   onReplay: (replay: any) => void
   onSelectZoneCatastropheComplete: () => void
   onCatastropheTriggered: (catastropheId: string) => void
+}
+
+function colorForGravity(gravity: string | number | null) {
+  if (!gravity) return 'var(--accent-emerald)';
+  
+  let gNum = 0;
+  if (typeof gravity === 'number') {
+    gNum = gravity;
+  } else {
+    const name = String(gravity).toLowerCase();
+    if (name === 'catastrófica' || name === 'catastrofica') gNum = 5;
+    else if (name === 'crítica' || name === 'critica') gNum = 4;
+    else if (name === 'alta') gNum = 3;
+    else if (name === 'moderada') gNum = 2;
+    else if (name === 'baja') gNum = 1;
+  }
+  
+  if (gNum === 5) return 'var(--accent-violet)'; // Violeta
+  if (gNum === 4) return 'var(--accent-red)'; // Rojo
+  if (gNum === 3) return 'var(--risk-high)'; // Naranja
+  if (gNum === 2 || gNum === 1) return 'var(--accent-amber)'; // Amarillo
+  return 'var(--accent-emerald)';
 }
 
 function colorForIncidentLoad(count: number) {
@@ -61,6 +83,10 @@ export default function MapaZonas({
   const pressureByZone = state?.cityPressure?.byZone || {}
 
   const handleZoneClick = useCallback(async (zonaId: number) => {
+    if (selectedZoneId === zonaId) {
+      onSelectZone(null)
+      return
+    }
     onSelectZone(zonaId)
     if (!selectedCatastrophe) return
 
@@ -92,7 +118,7 @@ export default function MapaZonas({
       setFeedback('Error: ' + (e as Error).message)
     }
     setTimeout(() => setFeedback(null), 3600)
-  }, [selectedCatastrophe, onCatastropheTriggered, onSelectZoneCatastropheComplete, onSelectZone, onReplay])
+  }, [selectedCatastrophe, selectedZoneId, onCatastropheTriggered, onSelectZoneCatastropheComplete, onSelectZone, onReplay])
 
   const incidentesPorZona = incidentes.reduce((acc: any, inc: any) => {
     const zid = inc.fk_zona_id || inc.zona_id || zonas.find((z: any) => z.nombre === inc.zona)?.id_zona
@@ -182,8 +208,8 @@ export default function MapaZonas({
           </filter>
         </defs>
 
-        <rect x="0" y="0" width="700" height="520" fill="url(#board-bg)" />
-        <rect x="0" y="0" width="700" height="520" fill="url(#city-grid)" />
+        <rect x="0" y="0" width="700" height="520" fill="url(#board-bg)" onClick={() => onSelectZone(null)} />
+        <rect x="0" y="0" width="700" height="520" fill="url(#city-grid)" onClick={() => onSelectZone(null)} />
 
         <g opacity="0.12">
           {layout.zones.map((z: any, index: number) => (
@@ -217,15 +243,48 @@ export default function MapaZonas({
           const reviewRatio = activeReview ? Math.max(0, Math.min(1, reviewRemaining / Math.max(1, reviewDelay))) : 0
           const confidence = confidenceByZone[String(z.id)]?.average ?? 0
           const pressure = pressureByZone[String(z.id)]?.score ?? 0
+
+          // Determinar el incidente más grave de la zona
+          const incsDeZona = incidentes.filter((inc: any) => {
+            const zid = inc.fk_zona_id || inc.zona_id || zonas.find((zone: any) => zone.nombre === inc.zona)?.id_zona;
+            return zid === z.id;
+          });
+          
+          let maxGrav: string | number | null = null;
+          if (incsDeZona.length > 0) {
+            const pesos: Record<string, number> = {
+              'baja': 1,
+              'moderada': 2,
+              'alta': 3,
+              'crítica': 4,
+              'critica': 4,
+              'catastrófica': 5,
+              'catastrofica': 5
+            };
+            let maxWeight = 0;
+            incsDeZona.forEach((inc: any) => {
+              const name = String(inc.gravedad || 'Baja').toLowerCase();
+              const weight = pesos[name] || inc.gravedad_id || 1;
+              if (weight > maxWeight) {
+                maxWeight = weight;
+                maxGrav = inc.gravedad || inc.gravedad_id;
+              }
+            });
+          }
+
           const color = mapLayer === 'confidence'
             ? confidenceColor(confidence)
             : mapLayer === 'pressure'
               ? pressureColor(pressure)
-              : colorForIncidentLoad(incCount)
+              : maxGrav
+                ? colorForGravity(maxGrav)
+                : '#34d399'
           const isSelected = selectedZoneId === z.id
           const isHot = incCount > 0
           const isTargeting = !!selectedCatastrophe
           const radius = incCount >= 2 ? 15 : incCount === 1 ? 12 : 9
+
+          const reviewColor = activeReview ? colorForGravity(activeReview.gravedad_id) : 'var(--accent-emerald)';
 
           return (
             <g key={z.id} className="zone-node" onClick={() => handleZoneClick(z.id)} style={{ cursor: isTargeting ? 'crosshair' : 'pointer' }}>
@@ -239,11 +298,14 @@ export default function MapaZonas({
                   cx={z.x}
                   cy={z.y}
                   r={12 + reviewRatio * 34}
-                  fill="var(--accent-emerald)"
+                  fill={reviewColor}
                   fillOpacity={0.08 + reviewRatio * 0.12}
-                  stroke="var(--accent-emerald)"
+                  stroke={reviewColor}
                   strokeWidth="2"
                   strokeOpacity={0.35 + reviewRatio * 0.45}
+                  style={{
+                    filter: `drop-shadow(0 0 10px ${reviewColor})`
+                  }}
                 />
               )}
               {isHot && <circle className="zone-alert-ring" cx={z.x} cy={z.y} r="38" fill="none" stroke={color} />}

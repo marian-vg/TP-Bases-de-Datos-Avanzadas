@@ -1,5 +1,5 @@
 from ..db import get_pool
-from ..services import operator, physical_world, city_pressure, game_feed
+from ..services import operator, physical_world, city_pressure, game_feed, clock
 
 
 def get_full_state_sync(sim_now) -> dict:
@@ -27,9 +27,36 @@ def get_full_state_sync(sim_now) -> dict:
             cols = [d.name for d in cur.description]
             sensores = [dict(zip(cols, r)) for r in cur]
 
-            cur.execute("SELECT * FROM vIncidentesActivos ORDER BY fecha_hora_registro DESC LIMIT 100;")
+            cur.execute(
+                """SELECT v.*, i.prioridad
+                   FROM vIncidentesActivos v
+                   JOIN Incidente i ON v.id_incidente = i.id_incidente
+                   ORDER BY v.fecha_hora_registro DESC
+                   LIMIT 100;"""
+            )
             cols = [d.name for d in cur.description]
             incidentes_activos = [dict(zip(cols, r)) for r in cur]
+
+            # Corregir minutos transcurridos inconsistentes (reloj real vs simulado)
+            import datetime as dt
+            sim_scale = clock.get_scale()
+            for inc in incidentes_activos:
+                reg_time = inc["fecha_hora_registro"]
+                if reg_time.tzinfo is None:
+                    now_compare = dt.datetime.now()
+                    s_now = sim_now.replace(tzinfo=None) if sim_now.tzinfo is not None else sim_now
+                else:
+                    now_compare = dt.datetime.now(dt.timezone.utc)
+                    s_now = sim_now if sim_now.tzinfo is not None else sim_now.replace(tzinfo=dt.timezone.utc)
+                
+                if reg_time > now_compare + dt.timedelta(minutes=1):
+                    # Tiempo simulado: delta directo contra s_now
+                    diff_seconds = (s_now - reg_time).total_seconds()
+                    inc["minutos_transcurridos"] = max(0, round(diff_seconds / 60))
+                else:
+                    # Tiempo real: delta real multiplicado por la escala
+                    diff_seconds = (now_compare - reg_time).total_seconds()
+                    inc["minutos_transcurridos"] = max(0, round((diff_seconds * sim_scale) / 60))
 
             cur.execute("SELECT * FROM vIncidentesCriticos LIMIT 50;")
             cols = [d.name for d in cur.description]

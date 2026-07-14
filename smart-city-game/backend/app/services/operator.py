@@ -5,11 +5,12 @@ from ..repositories import events_repo
 from ..config import OPERATOR_REVIEW_MIN_DELAY, OPERATOR_REVIEW_MAX_DELAY
 from . import clock, game_feed
 
-_pending_reviews: dict[int, dict] = {}
+_pending_reviews: dict[str | int, dict] = {}
+_review_counter = 0
 
 
 def enqueue_operator_review(
-    evento_id: int,
+    evento_id: int | None,
     zona_id: int,
     tipo_evento_id: int,
     sensor_id: int | None = None,
@@ -17,8 +18,18 @@ def enqueue_operator_review(
     tipo_sensor: str | None = None,
     sensor_confianza=None,
 ):
+    global _review_counter
+    _review_counter += 1
+    review_key = evento_id if evento_id is not None else f"manual-{_review_counter}"
+
+    mapeo = events_repo.get_promocion_mapeo_sync(tipo_evento_id)
+    if not mapeo:
+        mapeo = events_repo.get_accidente_fallback_mapeo_sync()
+    gravedad_id = mapeo["gravedad_id"] if mapeo else 3
+
     delay = random.randint(OPERATOR_REVIEW_MIN_DELAY, OPERATOR_REVIEW_MAX_DELAY)
-    _pending_reviews[evento_id] = {
+    _pending_reviews[review_key] = {
+        "review_key": review_key,
         "evento_id": evento_id,
         "zona_id": zona_id,
         "tipo_evento_id": tipo_evento_id,
@@ -28,15 +39,22 @@ def enqueue_operator_review(
         "sensor_confianza": float(sensor_confianza or 0),
         "delay_seconds": delay,
         "scheduled_at_real": datetime.utcnow().timestamp() + delay,
+        "gravedad_id": gravedad_id,
     }
+    
+    msg = (
+        f"Llamada ciudadana reporta emergencia en zona {zona_id}; validación estimada en {delay}s."
+        if evento_id is None
+        else f"La señal requiere validación manual; confirmación estimada en {delay}s."
+    )
     game_feed.add(
         kind="operator",
-        title="Operador inicia revisión",
-        message=f"La señal requiere validación manual; confirmación estimada en {delay}s.",
+        title="Llamada reportada" if evento_id is None else "Operador inicia revisión",
+        message=msg,
         zona_id=zona_id,
         severity="warning",
-        dedupe_key=f"review-start:{evento_id}",
-        meta={"eventId": evento_id, "confidence": float(sensor_confianza or 0), "delay": delay},
+        dedupe_key=f"review-start:{review_key}",
+        meta={"reviewKey": review_key, "eventId": evento_id, "confidence": float(sensor_confianza or 0), "delay": delay},
     )
     return delay
 
@@ -44,10 +62,11 @@ def enqueue_operator_review(
 def get_pending_reviews() -> list[dict]:
     now = datetime.utcnow().timestamp()
     pending = []
-    for v in _pending_reviews.values():
+    for k, v in _pending_reviews.items():
         if v["scheduled_at_real"] <= now:
             continue
         pending.append({
+            "review_key": k,
             "evento_id": v["evento_id"],
             "zona_id": v["zona_id"],
             "tipo_evento_id": v["tipo_evento_id"],
@@ -57,6 +76,7 @@ def get_pending_reviews() -> list[dict]:
             "sensor_confianza": v.get("sensor_confianza", 0),
             "delay_seconds": v.get("delay_seconds"),
             "seconds_remaining": max(0, int(v["scheduled_at_real"] - now)),
+            "gravedad_id": v.get("gravedad_id", 3),
         })
     return pending
 
@@ -64,17 +84,15 @@ def get_pending_reviews() -> list[dict]:
 def process_pending_reviews_sync():
     now = datetime.utcnow().timestamp()
     due = [
-        (eid, v)
-        for eid, v in _pending_reviews.items()
+        (rk, v)
+        for rk, v in _pending_reviews.items()
         if v["scheduled_at_real"] <= now
     ]
     results = []
 
-    for evento_id, review in due:
-        del _pending_reviews[evento_id]
+    for review_key, review in due:
+        del _pending_reviews[review_key]
 
-        # Mismo origen de verdad que el camino inmediato (>80%): el mapeo
-        # tipo_evento -> tipo_incidente/gravedad vive en la BD, no en config del juego.
         mapeo = events_repo.get_promocion_mapeo_sync(review["tipo_evento_id"])
         fallback_accidente = False
         if not mapeo:
@@ -84,6 +102,7 @@ def process_pending_reviews_sync():
         if mapeo:
             sim = clock.sim_now()
             try:
+                evento_id = review["evento_id"]
                 incidente_id = events_repo.insert_incidente_sync(
                     evento_id=evento_id,
                     tipo_incidente_id=mapeo["tipo_incidente_id"],
@@ -91,28 +110,43 @@ def process_pending_reviews_sync():
                     zona_id=review["zona_id"],
                     sim_now=sim,
                     descripcion=(
-                        f"Operador acredita accidente por evento {evento_id}"
-                        if fallback_accidente
-                        else f"Operador confirma incidente por evento {evento_id}"
+                        f"Llamado ciudadano: reporte de emergencia en zona {review['zona_id']}"
+                        if evento_id is None
+                        else (
+                            f"Operador acredita accidente por evento {evento_id}"
+                            if fallback_accidente
+                            else f"Operador confirma incidente por evento {evento_id}"
+                        )
                     ),
                 )
-                game_feed.add(
-                    kind="operator",
-                    title="Operador acredita accidente" if fallback_accidente else "Operador confirma incidente",
-                    message=(
+                
+                title = (
+                    "Llamado confirmado"
+                    if evento_id is None
+                    else ("Operador acredita accidente" if fallback_accidente else "Operador confirma incidente")
+                )
+                msg = (
+                    f"El reporte ciudadano de zona {review['zona_id']} fue validado como incidente {incidente_id}."
+                    if evento_id is None
+                    else (
                         f"El evento {evento_id} fue validado como accidente {incidente_id}."
                         if fallback_accidente
                         else f"El evento {evento_id} fue validado y se registró como incidente {incidente_id}."
-                    ),
+                    )
+                )
+                game_feed.add(
+                    kind="operator",
+                    title=title,
+                    message=msg,
                     zona_id=review["zona_id"],
                     severity="danger",
-                    dedupe_key=f"review-promoted:{evento_id}",
-                    meta={"eventId": evento_id, "incidentId": incidente_id},
+                    dedupe_key=f"review-promoted:{review_key}",
+                    meta={"reviewKey": review_key, "eventId": evento_id, "incidentId": incidente_id},
                 )
-                results.append({"evento_id": evento_id, "incidente_id": incidente_id, "status": "promoted"})
+                results.append({"review_key": review_key, "incidente_id": incidente_id, "status": "promoted"})
             except Exception as e:
-                results.append({"evento_id": evento_id, "error": str(e), "status": "failed"})
+                results.append({"review_key": review_key, "error": str(e), "status": "failed"})
         else:
-            results.append({"evento_id": evento_id, "status": "failed_no_fallback"})
+            results.append({"review_key": review_key, "status": "failed_no_fallback"})
 
     return results

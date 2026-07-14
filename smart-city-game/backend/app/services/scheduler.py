@@ -45,6 +45,7 @@ def _tick_sync():
                     zona_destino=a["zona_destino"],
                     timestamp_asignacion=a["timestamp_asignacion"],
                     sla_minutos=a.get("sla_minutos"),
+                    gravedad_id=a.get("gravedad_id", 3),
                 )
 
         physical_world.process_arrivals_sync()
