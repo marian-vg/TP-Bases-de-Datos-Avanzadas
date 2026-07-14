@@ -1797,16 +1797,18 @@ body {
 }
 
 /* ── Sistema de Tutorial Interactivo ── */
-.tutorial-overlay {
+/* Backdrop oscuro para el modal de bienvenida */
+.tutorial-backdrop-dim {
   position: fixed;
   top: 0;
   left: 0;
   width: 100vw;
   height: 100vh;
-  background: rgba(8, 12, 20, 0.45);
-  backdrop-filter: blur(1.5px);
-  z-index: 9990;
-  pointer-events: none;
+  background: rgba(8, 12, 20, 0.65);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  z-index: 99990;
+  pointer-events: auto;
 }
 
 /* Modal de Bienvenida */
@@ -1823,7 +1825,7 @@ body {
   width: 480px;
   padding: 28px;
   box-shadow: 0 20px 50px -15px rgba(0, 0, 0, 0.7), 0 0 30px rgba(56, 189, 248, 0.15);
-  z-index: 9991;
+  z-index: 99995;
   display: flex;
   flex-direction: column;
   gap: 16px;

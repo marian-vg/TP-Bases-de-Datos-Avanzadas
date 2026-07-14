@@ -52,7 +52,8 @@ export default function TutorialOverlay({ selectedCatastrophe, selectedZoneId, o
 
   if (step === 0) {
     return (
-      <div className="tutorial-overlay" style={{ pointerEvents: 'auto' }}>
+      <>
+        <div className="tutorial-backdrop-dim" />
         <div className="tutorial-modal">
           <div className="tutorial-modal-header">
             <div className="tutorial-modal-icon">
@@ -78,12 +79,12 @@ export default function TutorialOverlay({ selectedCatastrophe, selectedZoneId, o
             </button>
           </div>
         </div>
-      </div>
+      </>
     )
   }
 
   return (
-    <div className="tutorial-overlay">
+    <>
       {step === 1 && (
         <div className="tutorial-tooltip tutorial-tooltip--hotbar">
           <div className="tutorial-tooltip-step">Paso 1 de 3</div>
@@ -122,6 +123,6 @@ export default function TutorialOverlay({ selectedCatastrophe, selectedZoneId, o
           </div>
         </div>
       )}
-    </div>
+    </>
   )
 }
