@@ -10,6 +10,7 @@ import GameSidebar from './components/GameSidebar'
 import GameDrawer from './components/GameDrawer'
 import ReplayOverlay from './components/ReplayOverlay'
 import ToastContainer from './components/ToastContainer'
+import TutorialOverlay from './components/TutorialOverlay'
 
 function App() {
   const [state, setState] = useState<any>(null)
@@ -21,6 +22,9 @@ function App() {
   const [selectedZoneId, setSelectedZoneId] = useState<number | null>(null)
   const [mapLayer, setMapLayer] = useState<'incidents' | 'confidence' | 'pressure'>('incidents')
   const [lastReplay, setLastReplay] = useState<any>(null)
+  const [tutorialActive, setTutorialActive] = useState<boolean>(() => {
+    return localStorage.getItem('smartcity_tutorial_completed') !== 'true'
+  })
 
   const load = useCallback(async () => {
     try {
@@ -77,7 +81,7 @@ function App() {
       <div className="game-backdrop" />
 
       {/* ── Top bar: logo + metrics ── */}
-      <GameTopbar state={state} />
+      <GameTopbar state={state} onStartTutorial={() => setTutorialActive(true)} />
 
       {/* ── Status bar: sim controls ── */}
       <StatusBar state={state} mapLayer={mapLayer} onMapLayerChange={setMapLayer} />
@@ -120,6 +124,15 @@ function App() {
 
       {/* ── Toast notifications stacked ── */}
       <ToastContainer state={state} />
+
+      {/* ── Tutorial overlay ── */}
+      {tutorialActive && (
+        <TutorialOverlay
+          selectedCatastrophe={selectedCatastrophe}
+          selectedZoneId={selectedZoneId}
+          onClose={() => setTutorialActive(false)}
+        />
+      )}
     </div>
   )
 }

@@ -1795,3 +1795,212 @@ body {
   background: rgba(255, 255, 255, 0.06);
   margin: 4px 0;
 }
+
+/* ── Sistema de Tutorial Interactivo ── */
+.tutorial-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background: rgba(8, 12, 20, 0.45);
+  backdrop-filter: blur(1.5px);
+  z-index: 9990;
+  pointer-events: none;
+}
+
+/* Modal de Bienvenida */
+.tutorial-modal {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background: rgba(15, 23, 42, 0.95);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  width: 440px;
+  padding: 24px;
+  box-shadow: 0 20px 50px -15px rgba(0, 0, 0, 0.7), 0 0 30px rgba(56, 189, 248, 0.15);
+  z-index: 9991;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  pointer-events: auto;
+  animation: tutorialModalIn 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes tutorialModalIn {
+  from { opacity: 0; transform: translate(-50%, -46%) scale(0.96); filter: blur(4px); }
+  to { opacity: 1; transform: translate(-50%, -50%) scale(1); filter: blur(0); }
+}
+
+.tutorial-modal-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.tutorial-modal-icon {
+  color: var(--accent-cyan);
+  background: rgba(34, 211, 238, 0.08);
+  border: 1px solid rgba(34, 211, 238, 0.2);
+  border-radius: 8px;
+  padding: 8px;
+  display: flex;
+}
+
+.tutorial-modal-title {
+  color: var(--hud-text);
+  font-size: 16px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+
+.tutorial-modal-body {
+  color: var(--hud-text-muted);
+  font-size: 12px;
+  line-height: 1.5;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.tutorial-modal-body strong {
+  color: var(--hud-text);
+}
+
+.tutorial-modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 8px;
+}
+
+/* Tooltips de paso */
+.tutorial-tooltip {
+  position: fixed;
+  background: rgba(15, 23, 42, 0.94);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  box-shadow: 0 15px 40px -10px rgba(0, 0, 0, 0.6), 0 0 20px rgba(34, 211, 238, 0.1);
+  padding: 14px 16px;
+  width: 280px;
+  z-index: 9992;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  pointer-events: auto;
+  transition: all 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+  animation: tooltipFadeIn 0.3s ease forwards;
+}
+
+@keyframes tooltipFadeIn {
+  from { opacity: 0; transform: scale(0.97); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+.tutorial-tooltip-step {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 700;
+  color: var(--accent-cyan);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+
+.tutorial-tooltip-title {
+  color: var(--hud-text);
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.tutorial-tooltip-msg {
+  color: var(--hud-text-muted);
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.tutorial-tooltip-msg strong {
+  color: var(--accent-cyan);
+}
+
+.tutorial-tooltip-footer {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 4px;
+}
+
+/* Flechas direccionales de Tooltips */
+.tutorial-tooltip::after {
+  content: '';
+  position: absolute;
+  border: 6px solid transparent;
+}
+
+/* Posiciones contextuales de tooltips */
+.tutorial-tooltip--hotbar {
+  bottom: 94px;
+  left: 50%;
+  transform: translateX(-50%);
+}
+.tutorial-tooltip--hotbar::after {
+  bottom: -12px;
+  left: 50%;
+  transform: translateX(-50%);
+  border-top-color: rgba(15, 23, 42, 0.94);
+}
+
+.tutorial-tooltip--map {
+  top: 45%;
+  left: 360px;
+}
+.tutorial-tooltip--map::after {
+  left: -12px;
+  top: 50%;
+  transform: translateY(-50%);
+  border-right-color: rgba(15, 23, 42, 0.94);
+}
+
+.tutorial-tooltip--sidebar {
+  top: 180px;
+  right: 420px;
+}
+.tutorial-tooltip--sidebar::after {
+  right: -12px;
+  top: 40px;
+  border-left-color: rgba(15, 23, 42, 0.94);
+}
+
+/* Foco visual por overlays */
+.tutorial-highlight-focus {
+  position: relative;
+  z-index: 9993 !important;
+  box-shadow: 0 0 0 9999px rgba(8, 12, 20, 0.65), 0 0 25px rgba(56, 189, 248, 0.35) !important;
+  pointer-events: auto !important;
+}
+
+/* Botón de ayuda en la topbar */
+.tutorial-help-btn {
+  background: none;
+  border: none;
+  color: var(--hud-text-muted);
+  cursor: pointer;
+  padding: 6px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+  border: 1px solid transparent;
+}
+
+.tutorial-help-btn:hover {
+  color: var(--accent-cyan);
+  background: rgba(34, 211, 238, 0.05);
+  border-color: rgba(34, 211, 238, 0.2);
+}

@@ -1,10 +1,11 @@
-import { CircuitBoard, AlertTriangle, Ambulance, Hourglass, Database, Activity, Gauge } from 'lucide-react'
+import { CircuitBoard, AlertTriangle, Ambulance, Hourglass, Database, Activity, Gauge, HelpCircle } from 'lucide-react'
 
 interface GameTopbarProps {
   state: any
+  onStartTutorial: () => void
 }
 
-export default function GameTopbar({ state }: GameTopbarProps) {
+export default function GameTopbar({ state, onStartTutorial }: GameTopbarProps) {
   const incidentes = state?.incidentesActivos?.length ?? 0
   const recursos = state?.recursos?.length ?? 0
   const revision = state?.eventosEnRevision?.length ?? 0
@@ -92,6 +93,14 @@ export default function GameTopbar({ state }: GameTopbarProps) {
             {dbStatus}
           </span>
         </div>
+        <button
+          className="tutorial-help-btn"
+          onClick={onStartTutorial}
+          title="Iniciar tutorial interactivo"
+          type="button"
+        >
+          <HelpCircle size={14} />
+        </button>
       </div>
     </header>
   )
