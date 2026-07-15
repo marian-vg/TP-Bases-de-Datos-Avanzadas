@@ -360,7 +360,7 @@ export default function MapaZonas({
               <circle cx={z.x} cy={z.y} r={isSelected ? radius + 3 : radius} fill={color} fillOpacity="0.9" stroke="rgba(21,29,40,0.7)" strokeWidth="2" filter={isHot ? 'url(#glow)' : undefined} />
               <text x={z.x} y={z.y - 38} className="zone-label">{z.name}</text>
               <text x={z.x} y={z.y + 42} className="zone-label zone-meta">
-                {mapLayer === 'confidence' ? `C:${Math.round(confidence)} S:${senCount}` : mapLayer === 'pressure' ? `P:${Math.round(pressure)} I:${incCount}` : `S:${senCount} I:${incCount} R:${reviewCount}`}
+                {mapLayer === 'confidence' ? `Conf:${Math.round(confidence)}% Sens:${senCount}` : mapLayer === 'pressure' ? `Pres:${Math.round(pressure)}% Inc:${incCount}` : `Sens:${senCount} Inc:${incCount} Rev:${reviewCount}`}
               </text>
             </g>
           )
