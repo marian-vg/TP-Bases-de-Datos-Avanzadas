@@ -65,7 +65,13 @@ export default function Hotbar({ state, selectedCatastrophe, onSelectCatastrophe
               isSelected && !disabled && 'hotbar-slot--armed',
             )}
             onClick={() => !disabled && onSelectCatastrophe(isSelected ? null : cat.id)}
-            title={disabled ? `${cat.nombre}: enfriamiento ${remaining.toFixed(0)}s` : `${cat.nombre}: seleccionar y luego clickear una zona`}
+            draggable={!disabled}
+            onDragStart={(e) => {
+              if (disabled) return
+              e.dataTransfer.setData('text/plain', cat.id)
+              onSelectCatastrophe(cat.id)
+            }}
+            title={disabled ? `${cat.nombre}: enfriamiento ${remaining.toFixed(0)}s` : `${cat.nombre}: arrastrá o hacé click para inyectar en el mapa`}
           >
             <div className="hotbar-icon" style={{ background: gStyle.bg, color: gStyle.text }}>
               <Icon size={13} />

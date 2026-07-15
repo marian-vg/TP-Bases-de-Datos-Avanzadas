@@ -73,6 +73,7 @@ export default function MapaZonas({
   onCatastropheTriggered,
 }: MapaZonasProps) {
   const [feedback, setFeedback] = useState<string | null>(null)
+  const [dragOverZoneId, setDragOverZoneId] = useState<number | null>(null)
 
   const zonas = state?.zonas || []
   const incidentes = state?.incidentesActivos || []
@@ -82,17 +83,10 @@ export default function MapaZonas({
   const confidenceByZone = state?.sensorConfidenceByZone || {}
   const pressureByZone = state?.cityPressure?.byZone || {}
 
-  const handleZoneClick = useCallback(async (zonaId: number) => {
-    if (selectedZoneId === zonaId) {
-      onSelectZone(null)
-      return
-    }
-    onSelectZone(zonaId)
-    if (!selectedCatastrophe) return
-
+  const triggerCatastropheForZone = useCallback(async (zonaId: number, catId: string) => {
     setFeedback('Inyectando evento en la ciudad...')
     try {
-      const result = await triggerCatastrophe(zonaId, selectedCatastrophe)
+      const result = await triggerCatastrophe(zonaId, catId)
       if (result.coverage === 'none') {
         setFeedback('Zona sin sensor compatible para ese evento')
       } else if (result.detectionMode === 'operator_review') {
@@ -105,20 +99,40 @@ export default function MapaZonas({
       onReplay({
         id: Date.now(),
         zoneId: zonaId,
-        catastropheType: selectedCatastrophe,
+        catastropheType: catId,
         detectionMode: result.detectionMode,
         sensorConfidence: result.sensorConfidence,
         reviewDelaySeconds: result.reviewDelaySeconds,
         incidentId: result.incidentId,
         sensorType: result.sensorType,
       })
-      onCatastropheTriggered(selectedCatastrophe)
+      onCatastropheTriggered(catId)
       onSelectZoneCatastropheComplete()
     } catch (e) {
       setFeedback('Error: ' + (e as Error).message)
     }
     setTimeout(() => setFeedback(null), 3600)
-  }, [selectedCatastrophe, selectedZoneId, onCatastropheTriggered, onSelectZoneCatastropheComplete, onSelectZone, onReplay])
+  }, [onCatastropheTriggered, onSelectZoneCatastropheComplete, onReplay])
+
+  const handleZoneClick = useCallback(async (zonaId: number) => {
+    if (selectedZoneId === zonaId) {
+      onSelectZone(null)
+      return
+    }
+    onSelectZone(zonaId)
+    if (!selectedCatastrophe) return
+    await triggerCatastropheForZone(zonaId, selectedCatastrophe)
+  }, [selectedCatastrophe, selectedZoneId, onSelectZone, triggerCatastropheForZone])
+
+  const handleDrop = useCallback(async (e: React.DragEvent, zonaId: number) => {
+    e.preventDefault()
+    setDragOverZoneId(null)
+    const catId = e.dataTransfer.getData('text/plain') || selectedCatastrophe
+    if (catId) {
+      onSelectZone(zonaId)
+      await triggerCatastropheForZone(zonaId, catId)
+    }
+  }, [selectedCatastrophe, onSelectZone, triggerCatastropheForZone])
 
   const incidentesPorZona = incidentes.reduce((acc: any, inc: any) => {
     const zid = inc.fk_zona_id || inc.zona_id || zonas.find((z: any) => z.nombre === inc.zona)?.id_zona
@@ -287,9 +301,35 @@ export default function MapaZonas({
           const reviewColor = activeReview ? colorForGravity(activeReview.gravedad_id) : 'var(--accent-emerald)';
 
           return (
-            <g key={z.id} className="zone-node" onClick={() => handleZoneClick(z.id)} style={{ cursor: isTargeting ? 'crosshair' : 'pointer' }}>
+            <g
+              key={z.id}
+              className="zone-node"
+              onClick={() => handleZoneClick(z.id)}
+              style={{ cursor: isTargeting ? 'crosshair' : 'pointer' }}
+              onDragOver={(e) => {
+                if (selectedCatastrophe) {
+                  e.preventDefault()
+                }
+              }}
+              onDragEnter={() => {
+                if (selectedCatastrophe) {
+                  setDragOverZoneId(z.id)
+                }
+              }}
+              onDragLeave={() => setDragOverZoneId(null)}
+              onDrop={(e) => handleDrop(e, z.id)}
+            >
               <title>{`${z.name}: ${labelForIncidentLoad(incCount)}. Sensores ${senCount}. Confianza ${confidence}. Presión ${pressure}. Revisiones ${reviewCount}.`}</title>
-              <circle cx={z.x} cy={z.y} r={isSelected ? 44 : 36} fill={color} fillOpacity={isSelected ? 0.16 : 0.05} />
+              <circle
+                cx={z.x}
+                cy={z.y}
+                r={isSelected || dragOverZoneId === z.id ? 44 : 36}
+                fill={dragOverZoneId === z.id ? 'var(--accent-cyan)' : color}
+                fillOpacity={isSelected || dragOverZoneId === z.id ? 0.22 : 0.05}
+                stroke={dragOverZoneId === z.id ? 'var(--accent-cyan)' : 'none'}
+                strokeWidth={dragOverZoneId === z.id ? 2 : 0}
+                style={{ transition: 'all 0.15s ease' }}
+              />
               {mapLayer === 'pressure' && pressure > 0 && <circle cx={z.x} cy={z.y} r={34 + pressure / 7} fill={color} fillOpacity={Math.min(0.18, pressure / 520)} />}
               {mapLayer === 'confidence' && confidence > 0 && <circle cx={z.x} cy={z.y} r={30} fill="none" stroke={color} strokeWidth="3" strokeOpacity={0.18 + confidence / 180} />}
               {activeReview && (
