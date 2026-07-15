@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { Activity, Ambulance, Crosshair, DatabaseZap, Hourglass, RadioTower, X } from 'lucide-react'
+import { formatFeedMessage } from '../lib/feedFormatter'
 
 const ICONS: Record<string, typeof Activity> = {
   attack: Crosshair,
@@ -91,17 +92,7 @@ export default function ToastContainer({ state }: ToastContainerProps) {
   // Resalta entidades conocidas
   const formatMessage = (message: string) => {
     if (!message) return ''
-    let html = message
-
-    // 0) Reemplazar zona ID numérico por su nombre descriptivo
-    if (state?.zonas) {
-      const zoneRegex = /\bzona\s*:?\s*(\d+)\b/gi
-      html = html.replace(zoneRegex, (match, zoneIdStr) => {
-        const zoneId = parseInt(zoneIdStr, 10)
-        const zoneObj = state.zonas.find((z: any) => z.id_zona === zoneId)
-        return zoneObj ? `zona ${zoneObj.nombre}` : match
-      })
-    }
+    let html = formatFeedMessage(message, state)
 
     // 1) Resaltar zonas
     if (state?.zonas) {
