@@ -9,3 +9,5 @@ simulacion/logs/*
 # Scripts locales de simulación
 start-game.sh
 stop-game.sh
+
+Juego SmartCity.zip
