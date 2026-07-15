@@ -40,6 +40,7 @@ export default function GameSidebar({ state, selectedZoneId, onSelectZone }: Gam
             <div className="zone-focus-metrics">
               <span><b>{Math.round(confidence?.average || 0)}</b> confianza</span>
               <span><b>{Math.round(pressure?.score || 0)}</b> presión</span>
+              <span><b>{(state?.sensores || []).filter((s: any) => s.fk_zona_id === selectedZoneId).length}</b> sensores</span>
             </div>
           )}
         </div>
