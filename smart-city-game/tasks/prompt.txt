@@ -1,0 +1,3 @@
+Necesito aplicar algunas mejoras al frontend del juego que hicimos en la carpeta [smart-city-game](file;file:///home/tomi/Documents/TP-Bases-de-Datos-Avanzadas/smart-city-game) , aprovechando la base de datos que creamos en este trabajo practico. Tenes la info de el tp en [Copia%20de%20TP1_2026_BDActivas%20-%20Consigna.md](file;file:///home/tomi/Documents/TP-Bases-de-Datos-Avanzadas/documentacion/Copia%20de%20TP1_2026_BDActivas%20-%20Consigna.md) , y las specs del juego en [specs.md](file;file:///home/tomi/Documents/TP-Bases-de-Datos-Avanzadas/smart-city-game/specs.md) 
+
+No podes tocar codigo hasta ahora, quiero que juntes contexto, y cuando me digas que entendiste de que va el proyecto, avanzamos con cosas. Okey? 
