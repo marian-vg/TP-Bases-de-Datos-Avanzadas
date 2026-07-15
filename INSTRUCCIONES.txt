@@ -1,0 +1,41 @@
+=============================================================================
+SMART CITY - GUÍA DE EJECUCIÓN OPERATIVA
+=============================================================================
+
+Este proyecto es una plataforma interactiva que permite evaluar e inyectar 
+eventos de catástrofes en tiempo real sobre una infraestructura de base de datos
+activa basada en PostgreSQL con Triggers y Store Procedures complejos.
+
+-----------------------------------------------------------------------------
+1. REQUERIMIENTOS PREVIOS
+-----------------------------------------------------------------------------
+Asegúrese de contar con los siguientes elementos instalados en su sistema Linux:
+  * Docker (v20.10 o superior)
+  * Docker Compose (v2.0 o superior)
+  * Un navegador web moderno (Chrome / Firefox)
+  * Puerto 80 y Puerto 5432 disponibles localmente
+
+-----------------------------------------------------------------------------
+2. CÓMO INICIAR EL JUEGO (RECOMENDADO)
+-----------------------------------------------------------------------------
+En la raíz del proyecto se incluye un script bash automatizado que se encarga 
+de levantar los contenedores en segundo plano, esperar a que la base de datos 
+esté saludable y limpiar/reiniciar los datos operativos para garantizar una 
+simulación limpia.
+
+Ejecute en su terminal:
+  $ chmod +x start-game.sh stop-game.sh
+  $ ./start-game.sh
+
+Una vez finalizado, acceda desde su navegador a:
+  http://localhost:80
+
+-----------------------------------------------------------------------------
+3. CÓMO APAGAR EL ENTORNO
+-----------------------------------------------------------------------------
+Para dar de baja los contenedores de forma limpia, ejecute:
+  $ ./stop-game.sh
+
+=============================================================================
+Diseño de Base de Datos Avanzadas - 2026
+=============================================================================
