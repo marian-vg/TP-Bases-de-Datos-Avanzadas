@@ -1,40 +1,42 @@
 =============================================================================
-SMART CITY - GUÍA DE EJECUCIÓN OPERATIVA
+SMART CITY - GUÍA DE EJECUCIÓN OPERATIVA MULTIPLATAFORMA
 =============================================================================
 
-Este proyecto es una plataforma interactiva que permite evaluar e inyectar 
-eventos de catástrofes en tiempo real sobre una infraestructura de base de datos
-activa basada en PostgreSQL con Triggers y Store Procedures complejos.
+Este proyecto cuenta con orquestación automática para levantarse de forma limpia
+tanto en sistemas Linux como en Windows mediante scripts automatizados.
 
 -----------------------------------------------------------------------------
 1. REQUERIMIENTOS PREVIOS
 -----------------------------------------------------------------------------
-Asegúrese de contar con los siguientes elementos instalados en su sistema Linux:
-  * Docker (v20.10 o superior)
+Asegúrese de contar con los siguientes elementos instalados en su sistema:
+  * Docker Engine (v20.10 o superior)
   * Docker Compose (v2.0 o superior)
-  * Un navegador web moderno (Chrome / Firefox)
-  * Puerto 80 y Puerto 5432 disponibles localmente
+  * Puertos 80 (o 5173 en Windows local) y 5432 libres localmente
 
 -----------------------------------------------------------------------------
-2. CÓMO INICIAR EL JUEGO (RECOMENDADO)
+2. INSTRUCCIONES PARA LINUX
 -----------------------------------------------------------------------------
-En la raíz del proyecto se incluye un script bash automatizado que se encarga 
-de levantar los contenedores en segundo plano, esperar a que la base de datos 
-esté saludable y limpiar/reiniciar los datos operativos para garantizar una 
-simulación limpia.
-
-Ejecute en su terminal:
+Levantar la aplicación (compila, levanta BD, aplica resets y orquesta juego):
   $ chmod +x start-game.sh stop-game.sh
   $ ./start-game.sh
 
-Una vez finalizado, acceda desde su navegador a:
-  http://localhost:80
+Una vez finalizado, acceda a: http://localhost:80
+
+Apagar el entorno de forma limpia:
+  $ ./stop-game.sh
 
 -----------------------------------------------------------------------------
-3. CÓMO APAGAR EL ENTORNO
+3. INSTRUCCIONES PARA WINDOWS
 -----------------------------------------------------------------------------
-Para dar de baja los contenedores de forma limpia, ejecute:
-  $ ./stop-game.sh
+Levantar la aplicación (compila, espera salud de BD y abre navegador):
+  * Haga doble click en el archivo: start-smart-city.cmd
+  * O bien, ejecute desde PowerShell: .\start-smart-city.ps1
+
+Una vez finalizado, acceda a: http://localhost:5173
+
+Apagar el entorno de forma limpia:
+  * Haga doble click en el archivo: stop-smart-city.cmd
+  * O bien, ejecute desde PowerShell: .\stop-smart-city.ps1
 
 =============================================================================
 Diseño de Base de Datos Avanzadas - 2026
